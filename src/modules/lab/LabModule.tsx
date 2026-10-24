@@ -13,7 +13,8 @@ import { Workspace } from '../../ui/Workspace';
 import { MolecularViewer } from './MolecularViewer';
 import { MiniPlot, VoltageClampPanel } from './plots';
 import { ClassificationReport, MeasurementTable } from './Report';
-import { ANNOTATION_GROUPS, KIND_LABEL, regionNote, useLabUi, useVariantStatus, type InspectorTab } from './labUi';
+import { ANNOTATION_GROUPS, KIND_LABEL, PLAIN_MECH, regionNote, simpleTakeaway, useLabUi, useVariantStatus, type InspectorTab } from './labUi';
+import { BigStat, useSimple } from '../../ui/simple';
 import { DOMAIN_COLOR, HELIX_FRACTION, HELIX_SOURCE, REGION_GEOM, RESIDUES, SEGMENT_RANGES, nearestResolved } from './structure';
 
 const ANALYSIS_MS = 1800;
@@ -66,7 +67,7 @@ function Sidebar() {
           <span className="font-mono text-[10px] text-mute">AGE {patient.ageAtPresentation}</span>
         </div>
         <div className="text-xs text-mute mt-0.5">{patient.presentation}</div>
-        {!fromPatient && <div className="mt-1 font-mono text-[10px] text-warn">Variant selected from atlas — not this patient's variant</div>}
+        {!fromPatient && <div className="mt-1 font-mono text-[10px] text-warn">Variant selected from atlas, not this patient's variant</div>}
       </div>
 
       <SectionHeader title="Variant" right={<EvidenceBadge category="hypothetical" />} />
@@ -76,7 +77,7 @@ function Sidebar() {
         <KV k="Residue" v={`${v.refAA}${v.position}${v.altAA}`} />
         <KV k="Region" v={region.label} sub={region.topology} />
         <KV k="Structure" v={anchor.resolved ? 'resolved in 6J8E' : `unresolved → ${anchor.residue.res}`} color={anchor.resolved ? undefined : C.warn} />
-        <KV k="Synthetic cells" v={v.nCells || '—'} unit="n" />
+        <KV k="Synthetic cells" v={v.nCells || 'n/a'} unit="n" />
         <div className="flex items-center justify-between pt-1">
           <span className="text-xs text-mute">Mechanism</span>
           {classification ? <MechanismTag mechanism={classification.mechanism} /> : <span className="font-mono text-[10px] text-dim">{status === 'running' ? 'ANALYZING…' : 'NOT YET CHARACTERIZED'}</span>}
@@ -191,14 +192,16 @@ function Ephys({ variantId, reveal, color }: { variantId: string; reveal: number
   const v = getVariant(variantId)!;
   const { status } = useVariantStatus(variantId);
   const showVariant = status !== 'idle';
-  const protocol = PROTOCOLS[lab.protocolId];
-  const refRun = useMemo(() => runProtocol(REFERENCE_PARAMS, lab.protocolId), [lab.protocolId]);
-  const varRun = useMemo(() => (showVariant ? runProtocol(v.params, lab.protocolId) : null), [showVariant, v.params, lab.protocolId]);
+  const simple = useViewMode((m) => m.simple);
+  // Simple view always shows the one experiment that answers "how much current?"
+  const pid: ProtocolId = simple ? 'activation' : lab.protocolId;
+  const protocol = PROTOCOLS[pid];
+  const refRun = useMemo(() => runProtocol(REFERENCE_PARAMS, pid), [pid]);
+  const varRun = useMemo(() => (showVariant ? runProtocol(v.params, pid) : null), [showVariant, v.params, pid]);
   const refCurves = useMemo(() => deriveCurves(REFERENCE_PARAMS), []);
   const varCurves = useMemo(() => (showVariant ? deriveCurves(v.params) : null), [showVariant, v.params]);
   const varFit = useMemo(() => (varCurves ? fitCurves(v.params, varCurves) : null), [varCurves, v.params]);
   const ref = C.mute;
-  const simple = useViewMode((m) => m.simple);
   const vr = reveal;
   const persistentPts = (pts: { t: number; i: number }[]) => pts.map((p) => ({ x: p.t, y: p.i * 100 }));
   const tail = (pts: { t: number; i: number }[]) => Math.max(...pts.filter((p) => p.t >= 80).map((p) => p.i * 100));
@@ -222,7 +225,13 @@ function Ephys({ variantId, reveal, color }: { variantId: string; reveal: number
       </div>
       </>}
 
-      <div className="flex items-center justify-between px-3 h-7">
+      {simple && (
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <span className="text-[13px] text-ink">Sodium current after each voltage step</span>
+          <EvidenceBadge category="simulated" />
+        </div>
+      )}
+      {!simple && <div className="flex items-center justify-between px-3 h-7">
         <Label><Term k="voltageClamp">Voltage clamp</Term></Label>
         <div className="flex items-center gap-2.5 font-mono text-[10px]">
           {lab.traceMode !== 'variant' && <span className="inline-flex items-center gap-1 text-mute"><span className="w-3 h-px" style={{ background: ref }} />REF</span>}
@@ -234,11 +243,19 @@ function Ephys({ variantId, reveal, color }: { variantId: string; reveal: number
           )}
           <EvidenceBadge category="simulated" />
         </div>
-      </div>
+      </div>}
       <div className="px-1.5" data-tour="lab.traces">
-        <VoltageClampPanel protocolId={lab.protocolId} mode={lab.traceMode} reference={refRun} variant={varRun} variantColor={color} reveal={vr} variantPending={!showVariant} />
+        <VoltageClampPanel protocolId={pid} mode={simple ? 'overlay' : lab.traceMode} reference={refRun} variant={varRun} variantColor={color} reveal={vr} variantPending={!showVariant} plain={simple} plotHeight={simple ? 250 : 196} />
       </div>
-      {simple && <div className="px-3 pb-2 text-[12px] leading-[17px] text-mute">Each curve is the current after a voltage step; deeper dips mean more sodium flowing in. <span className="text-ink">Gray = normal channel</span>{showVariant ? <>, <span style={{ color }}>colour = patient</span>.</> : '. Run the analysis to add the patient.'}</div>}
+      {simple && (
+        <div className="px-4 pb-3 text-[13px] leading-[19px] text-mute">
+          Downward dip = sodium flowing in. Deeper dip = stronger channel.
+          <div className="mt-1.5 flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5 text-ink"><span className="inline-block w-4 h-[2px]" style={{ background: ref }} />Normal channel</span>
+            {showVariant && <span className="inline-flex items-center gap-1.5" style={{ color }}><span className="inline-block w-4 h-[2px]" style={{ background: color }} />Patient’s channel</span>}
+          </div>
+        </div>
+      )}
 
       {!simple && <>
       <div className="flex items-center justify-between px-3 h-7 mt-1 border-t border-line2">
@@ -320,7 +337,7 @@ function Ephys({ variantId, reveal, color }: { variantId: string; reveal: number
               <div key={k} className="contents">
                 <span className="text-mute">{l}</span>
                 <span className="text-right text-mute">{fmt.num(REFERENCE_FIT[k], d)}</span>
-                <span className="text-right" style={{ color: varFit && vr >= 1 ? color : C.dim }}>{varFit && vr >= 1 ? fmt.num(varFit[k], d) : '—'}</span>
+                <span className="text-right" style={{ color: varFit && vr >= 1 ? color : C.dim }}>{varFit && vr >= 1 ? fmt.num(varFit[k], d) : 'n/a'}</span>
               </div>
             ))}
           </div>
@@ -430,14 +447,77 @@ function Inspector() {
   );
 }
 
+/** Simple view: one verdict, one trace, one action. No tabs, no metadata. */
+function SimpleInspector() {
+  const variantId = useStore((s) => s.selectedVariantId);
+  const runAnalysis = useStore((s) => s.runAnalysis);
+  const setModule = useStore((s) => s.setModule);
+  const v = getVariant(variantId);
+  const { status, classification, color } = useVariantStatus(variantId);
+  const reveal = useReveal(status);
+  if (!v) return <EmptyState title="No variant selected" />;
+  const take = classification ? simpleTakeaway(v.id, classification.mechanism) : null;
+
+  return (
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
+        <div className="px-4 pt-4 pb-4 border-b border-line2 min-h-[150px]" data-tour="lab.report">
+          <div className="font-mono text-[10px] tracking-[0.14em] text-dim mb-2">RESULT</div>
+          {status === 'complete' && classification && take ? (
+            <>
+              <BigStat value={take.value} label={take.label} color={color} />
+              <div className="mt-3 flex items-center gap-2">
+                <span className="inline-block w-[9px] h-[9px] rounded-[2px]" style={{ background: color }} />
+                <span className="text-[15px] text-ink">{PLAIN_MECH[classification.mechanism]}</span>
+              </div>
+              <div className="mt-1 text-[12px] text-mute">
+                {fmt.pct(classification.confidence)} confident: the call held when we re-ran it with random noise.
+              </div>
+            </>
+          ) : status === 'running' ? (
+            <div className="text-[14px] text-cyan">Measuring the patient's channel…</div>
+          ) : (
+            <div className="text-[14px] text-mute leading-[20px]">Not tested yet. Run the experiment to see how the patient's channel compares to a normal one.</div>
+          )}
+        </div>
+        <Ephys variantId={v.id} reveal={reveal} color={color} />
+      </div>
+
+      <div className="shrink-0 border-t border-line2 bg-bg px-4 py-3">
+        {status === 'idle' && (
+          <>
+            <div className="text-[12px] text-mute mb-2 leading-[17px]">Simulates the standard lab test: step the voltage, record the sodium current.</div>
+            <Button variant="primary" size="lg" className="w-full" data-tour="lab.run" onClick={() => runAnalysis(v.id)}>
+              <Play size={13} /> Run voltage-clamp analysis
+            </Button>
+          </>
+        )}
+        {status === 'running' && (
+          <div className="h-10 border border-line rounded flex items-center px-3">
+            <div className="flex-1 h-[3px] bg-line2 rounded-full overflow-hidden">
+              <div className="h-full bg-cyan" style={{ width: `${reveal * 100}%` }} />
+            </div>
+          </div>
+        )}
+        {status === 'complete' && (
+          <Button variant="primary" size="lg" className="w-full" data-tour="lab.explore" onClick={() => setModule('therapy')}>
+            Explore therapeutic strategies <ArrowRight size={13} />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Module ──────────────────────────────────────────────────────────────
 
 export function LabModule() {
   const setUi = useLabUi((s) => s.set);
   // clear transient hover/link state when leaving the module
   useEffect(() => () => setUi({ hoverRegionId: null, linkKey: null }), [setUi]);
+  const simple = useSimple();
   return (
-    <Workspace sidebar={<Sidebar />} inspector={<Inspector />} sidebarWidth={272} inspectorWidth={424}>
+    <Workspace sidebar={<Sidebar />} inspector={simple ? <SimpleInspector /> : <Inspector />} sidebarWidth={272} inspectorWidth={424}>
       <MolecularViewer />
     </Workspace>
   );

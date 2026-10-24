@@ -246,7 +246,7 @@ export function screeningArtifacts(
     variantId: variant.id,
     validationStatus: 'not-validated',
     reuseConditions: [{ kind: 'never-transfers', reason: 'Clinical safety and effectiveness in one individual does not establish safety or effectiveness in another.' }],
-    limitations: ['Placeholder — no Priori-designed therapy has been tested in humans.'],
+    limitations: ['Placeholder, no Priori-designed therapy has been tested in humans.'],
   }, 'hypothetical'));
 
   return out;

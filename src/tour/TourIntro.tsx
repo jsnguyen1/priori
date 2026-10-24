@@ -33,10 +33,10 @@ export function TourIntro() {
               <div className="font-mono text-[10px] tracking-[0.18em] text-cyan">PRIORI · SCN2A PROGRAM</div>
               <div className="mt-3 text-[22px] leading-[29px] text-ink font-medium">The next patient shouldn’t start from zero.</div>
               <p className="mt-3 text-[13.5px] leading-[21px] text-ink/85">
-                Children with rare genetic diseases often wait years while scientists work out what their mutation does and how to treat it — starting from scratch for every child.
+                Children with rare genetic diseases often wait years while scientists work out what their mutation does and how to treat it, starting from scratch for every child.
               </p>
               <p className="mt-2 text-[13.5px] leading-[21px] text-ink/85">
-                Priori keeps what was learned for one patient and reuses it, safely, for the next. In the next five minutes you’ll use the same software a Priori scientist would — and we’ll show you where to click.
+                Priori keeps what was learned for one patient and reuses it, safely, for the next. In the next five minutes you’ll use the same software a Priori scientist would, and we’ll show you where to click.
               </p>
               <div className="mt-4 grid grid-cols-3 gap-2 font-mono text-[10px] tracking-[0.06em] text-mute">
                 {[

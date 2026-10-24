@@ -320,7 +320,7 @@ export function TourOverlay() {
                 )}
               >
                 {stepDone ? <Check size={14} /> : <MousePointerClick size={14} className={nudge ? 'text-warn' : 'text-cyan'} />}
-                <span>{stepDone ? (done[step.id] === 'user' ? 'Nice — that’s right.' : 'Done for you.') : nudge ? <>Not quite — {lowerFirst(step.action!.instruction)} It’s outlined.</> : step.action!.instruction}</span>
+                <span>{stepDone ? (done[step.id] === 'user' ? 'Nice, that’s right.' : 'Done for you.') : nudge ? <>Not quite, {lowerFirst(step.action!.instruction)} It’s outlined.</> : step.action!.instruction}</span>
               </motion.div>
             </AnimatePresence>
           )}

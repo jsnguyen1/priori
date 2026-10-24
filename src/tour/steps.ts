@@ -47,7 +47,7 @@ export const STEPS: TourStep[] = [
     module: 'patient',
     placement: 'center',
     title: 'You’re looking at a scientist’s screen',
-    body: 'This is the software a Priori researcher would use. It’s dense on purpose — real biology is. We’ll walk through one patient’s story together, one click at a time.',
+    body: 'This is the software a Priori researcher would use. It’s dense on purpose, real biology is. We’ll walk through one patient’s story together, one click at a time.',
     why: 'Look for the glowing outline: that’s where to click. Everything here is a simulation with invented patients.',
     prepare: (s) => {
       if (s.activePatientId !== P1) s.setActivePatient(P1);
@@ -69,7 +69,7 @@ export const STEPS: TourStep[] = [
     module: 'patient',
     target: 'patient.finding',
     placement: 'bottom',
-    title: 'Genetic testing found a change — but not what it does',
+    title: 'Genetic testing found a change, but not what it does',
     body: 'Sequencing found a single-letter change in a gene called SCN2A. That gene builds a tiny gate in brain cells that lets sodium in to fire signals. Nobody has ever tested this exact change.',
     why: 'So doctors know where the problem is, but not whether the gate is now too open or too weak.',
   },
@@ -80,7 +80,7 @@ export const STEPS: TourStep[] = [
     target: 'patient.decision',
     placement: 'top',
     title: 'Your call, doctor',
-    body: 'A common seizure drug works by blocking that sodium gate. It helps if the gate is too open — but could make things worse if the gate is already too weak.',
+    body: 'A common seizure drug works by blocking that sodium gate. It helps if the gate is too open, but could make things worse if the gate is already too weak.',
     controls: [
       { label: 'ADMINISTER', meaning: 'Give the gate-blocking drug now.' },
       { label: 'WITHHOLD', meaning: 'Wait and seek more evidence first.' },
@@ -96,7 +96,7 @@ export const STEPS: TourStep[] = [
     placement: 'left',
     title: 'What the lab would later find',
     body: 'In this simulation, the gate turned out to be too WEAK: it carries about 70% less current than normal. That’s called “loss of function” (blue).',
-    why: 'A gate-blocker pushes in the wrong direction here. The problem wasn’t your decision — it was missing evidence.',
+    why: 'A gate-blocker pushes in the wrong direction here. The problem wasn’t your decision, it was missing evidence.',
     controls: [
       { label: 'Peak current ratio 0.31×', meaning: 'The gate passes about a third of normal current.' },
       { label: '± SE · n = 14', meaning: 'Uncertainty, from 14 simulated cells.' },
@@ -113,7 +113,7 @@ export const STEPS: TourStep[] = [
     target: 'patient.openAtlas',
     placement: 'top',
     title: 'What if that evidence already existed?',
-    body: 'Priori builds a library of what genetic changes do — before a patient needs it. Let’s open it.',
+    body: 'Priori builds a library of what genetic changes do, before a patient needs it. Let’s open it.',
     action: { instruction: 'Click OPEN MECHANISM ATLAS.', done: (s) => s.module === 'atlas' },
     autoDo: (s) => {
       s.selectVariant(v1(), { focus: true, silent: true });
@@ -133,8 +133,8 @@ export const STEPS: TourStep[] = [
     controls: [
       { label: 'Amber', meaning: 'Gate too open (gain of function).' },
       { label: 'Blue', meaning: 'Gate too weak (loss of function).' },
-      { label: 'Violet', meaning: 'Mixed — some of each.' },
-      { label: 'Gray', meaning: 'Unknown — not enough evidence yet.' },
+      { label: 'Violet', meaning: 'Mixed, some of each.' },
+      { label: 'Gray', meaning: 'Unknown, not enough evidence yet.' },
       { label: 'Scroll / drag', meaning: 'Zoom in and pan along the protein.' },
     ],
   },
@@ -145,7 +145,7 @@ export const STEPS: TourStep[] = [
     target: 'atlas.inspector',
     placement: 'left',
     title: 'Our patient’s change, and its neighbours',
-    body: 'The map zoomed to our patient’s change in the gate’s pore — its central opening. The panel on the right shows its measurements and what nearby changes tend to do.',
+    body: 'The map zoomed to our patient’s change in the gate’s pore, its central opening. The panel on the right shows its measurements and what nearby changes tend to do.',
     why: 'Neighbours give a hint, not proof. Gray everywhere means the field still lacks evidence.',
     prepare: (s) => {
       if (s.selectedVariantId !== v1()) s.selectVariant(v1(), { focus: true, silent: true });
@@ -217,9 +217,9 @@ export const STEPS: TourStep[] = [
     module: 'lab',
     target: 'lab.report',
     placement: 'left',
-    title: 'The verdict — with its uncertainty',
+    title: 'The verdict, with its uncertainty',
     body: 'Simple, published-style rules turn the measurements into a call: loss of function. The confidence shows how often the call holds if we jiggle every measurement by its uncertainty.',
-    why: 'It can also say “indeterminate” — the software is allowed to say “we don’t know.”',
+    why: 'It can also say “indeterminate”, the software is allowed to say “we don’t know.”',
   },
   {
     id: 'labExplore',
@@ -281,12 +281,12 @@ export const STEPS: TourStep[] = [
     target: 'therapy.candidates',
     placement: 'top',
     title: 'Choose drug candidates to test',
-    body: 'These are invented candidate designs with predicted scores. Pick a few to test — or reject ones that look risky. Predictions are just that: many won’t work.',
+    body: 'These are invented candidate designs with predicted scores. Pick a few to test, or reject ones that look risky. Predictions are just that: many won’t work.',
     controls: [
       { label: 'Binding', meaning: 'How well it’s predicted to stick to its target.' },
       { label: 'Specificity', meaning: 'How well it avoids sticking elsewhere.' },
       { label: 'Uncertainty', meaning: 'How unsure the model is.' },
-      { label: 'Reject', meaning: 'Rule it out — the reason is logged.' },
+      { label: 'Reject', meaning: 'Rule it out, the reason is logged.' },
     ],
     action: { instruction: 'Nominate at least 2 candidates.', done: (s) => (s.therapy[P1]?.nominated.length ?? 0) >= 2 },
     autoDo: (s) => {
@@ -375,7 +375,7 @@ export const STEPS: TourStep[] = [
     target: 'reuse.characterize',
     placement: 'right',
     title: 'Test the new change first',
-    body: 'We still measure this child’s exact change — that never gets skipped. But the test itself is already set up from last time.',
+    body: 'We still measure this child’s exact change, that never gets skipped. But the test itself is already set up from last time.',
     action: { instruction: 'Run the characterization for PX-002.', done: (s) => s.analyses[v2()]?.status === 'complete' },
     autoDo: (s) => ensureAnalysis(s, v2()),
   },
@@ -405,7 +405,7 @@ export const STEPS: TourStep[] = [
       { label: 'Cyan', meaning: 'Reused as-is.' },
       { label: 'Amber (dashed)', meaning: 'Reusable after a check.' },
       { label: 'White (dotted)', meaning: 'Must be done new.' },
-      { label: 'Red', meaning: 'Can never transfer — e.g. whether a drug worked for someone else.' },
+      { label: 'Red', meaning: 'Can never transfer, e.g. whether a drug worked for someone else.' },
     ],
     action: { instruction: 'Click any box to see why.', done: (s) => s.selectedReuseNode !== null },
     autoDo: (s) => s.selectReuseNode('candidate-screening'),
@@ -417,7 +417,7 @@ export const STEPS: TourStep[] = [
     target: 'reuse.pathways',
     placement: 'top',
     title: 'Different patient. Different mutation. Less work repeated.',
-    body: 'Patient 001 needed everything built from scratch. Patient 002 inherits the test setup, the reference cells and the drug chemistry — but still gets its own measurements and safety studies.',
+    body: 'Patient 001 needed everything built from scratch. Patient 002 inherits the test setup, the reference cells and the drug chemistry, but still gets its own measurements and safety studies.',
     why: 'Shared knowledge speeds things up; it never replaces patient-specific safety.',
   },
 
@@ -479,6 +479,6 @@ export const STEPS: TourStep[] = [
     placement: 'center',
     title: 'The next patient shouldn’t start from zero.',
     body: 'Patient 001 required new research. Patient 002 inherited what we learned. Patient 1,000 shouldn’t have to start from zero.',
-    why: 'That’s Priori. Everything you saw is a transparent simulation — click the shield icon (bottom-left) to see exactly what’s real, simulated or assumed.',
+    why: 'That’s Priori. Everything you saw is a transparent simulation, click the shield icon (bottom-left) to see exactly what’s real, simulated or assumed.',
   },
 ];

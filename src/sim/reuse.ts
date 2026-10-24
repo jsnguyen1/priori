@@ -90,14 +90,14 @@ export function evaluateCondition(cond: ReuseCondition, a: EvidenceArtifact, ctx
       // ReuseContext is SCN2A-only in this demonstration; provenance gene is typed 'SCN2A'.
       return ok(p.gene === 'SCN2A', `Source gene ${p.gene}; target gene SCN2A.`);
     case 'same-mechanism':
-      if (!ctx.characterized) return ok(false, `Target mechanism unknown — ${ctx.variantId} has no completed functional characterization.`);
+      if (!ctx.characterized) return ok(false, `Target mechanism unknown, ${ctx.variantId} has no completed functional characterization.`);
       if (p.mechanism === null) return ok(false, 'Source artifact records no mechanism.');
       if (ctx.mechanism === 'indeterminate' || ctx.mechanism === 'mixed') return ok(false, `Target classified ${ctx.mechanism}; no directional mechanism to match.`);
       return ok(p.mechanism === ctx.mechanism, `Source mechanism ${p.mechanism}; target mechanism ${ctx.mechanism}.`);
     case 'same-variant':
-      return ok(p.variantId === ctx.variantId, `Source variant ${p.variantId ?? '—'}; target variant ${ctx.variantId}.`);
+      return ok(p.variantId === ctx.variantId, `Source variant ${p.variantId ?? 'n/a'}; target variant ${ctx.variantId}.`);
     case 'same-domain':
-      return ok(p.domain === ctx.domain, `Source domain ${p.domain ?? '—'}; target domain ${ctx.domain}.`);
+      return ok(p.domain === ctx.domain, `Source domain ${p.domain ?? 'n/a'}; target domain ${ctx.domain}.`);
     case 'same-region-kind':
       if (p.regionKind === null) return ok(true, `Region-level prior covers all region kinds, including ${ctx.regionKind}.`);
       return ok(p.regionKind === ctx.regionKind, `Source region kind ${p.regionKind}; target region kind ${ctx.regionKind}.`);
@@ -233,20 +233,20 @@ const WORK: Record<EvidenceNodeId, Record<ReuseClass, string[]>> = {
     'not-transferable': ['Develop methods de novo.'],
   },
   'safety-testing': {
-    reusable: ['—'],
-    'reuse-with-validation': ['Sequence-specific toxicology studies (always required).', 'Off-target / hybridization-dependent toxicity assessment for the new sequence.', 'Use class-safety knowledge to design — not replace — studies.'],
+    reusable: ['n/a'],
+    'reuse-with-validation': ['Sequence-specific toxicology studies (always required).', 'Off-target / hybridization-dependent toxicity assessment for the new sequence.', 'Use class-safety knowledge to design, not replace, studies.'],
     'new-work': ['Design and run sequence-specific nonclinical safety program.', 'Establish modality class-safety baseline.'],
     'not-transferable': ['Safety studies de novo.'],
   },
   'regulatory-documentation': {
-    reusable: ['—'],
-    'reuse-with-validation': ['Update platform CMC / nonclinical sections for the new sequence.', 'Write patient-specific sections (variant rationale, safety data, clinical protocol) — new work.'],
+    reusable: ['n/a'],
+    'reuse-with-validation': ['Update platform CMC / nonclinical sections for the new sequence.', 'Write patient-specific sections (variant rationale, safety data, clinical protocol), new work.'],
     'new-work': ['Draft complete individualized-program documentation, including platform and patient-specific sections.'],
     'not-transferable': ['Draft documentation de novo.'],
   },
   'clinical-evidence': {
-    reusable: ['—'],
-    'reuse-with-validation': ['—'],
+    reusable: ['n/a'],
+    'reuse-with-validation': ['n/a'],
     'new-work': ['Patient-specific clinical protocol, dosing and monitoring. Clinical evidence is generated per individual.'],
     'not-transferable': ['Patient-specific clinical evaluation, dosing and monitoring. No clinical evidence transfers between individuals.'],
   },

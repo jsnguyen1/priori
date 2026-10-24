@@ -126,7 +126,12 @@ export function VoltageClampPanel({
   variantColor,
   reveal,
   variantPending,
+  plain = false,
+  plotHeight = 196,
 }: {
+  /** Simple view: plain-English axis and chip labels */
+  plain?: boolean;
+  plotHeight?: number;
   protocolId: ProtocolId;
   mode: TraceMode;
   reference: ProtocolRun;
@@ -148,7 +153,7 @@ export function VoltageClampPanel({
 
   const M = { l: 46, r: 10, t: 6, b: 26 };
   const insetH = 46;
-  const plotH = 196;
+  const plotH = plotHeight;
   const H = insetH + 10 + plotH + M.t + M.b;
   const iw = Math.max(10, W - M.l - M.r);
   const sx = useMemo(() => scaleLinear().domain(win).range([M.l, M.l + iw]), [win, iw, M.l]);
@@ -242,7 +247,7 @@ export function VoltageClampPanel({
 
           {/* command inset */}
           <YAxis scale={sv} x={M.l} ticks={vTicks} />
-          <text x={M.l + 4} y={M.t + 8} fontSize={9} className="font-mono" fill={C.mute}>V cmd (mV)</text>
+          <text x={M.l + 4} y={M.t + 8} fontSize={9} className="font-mono" fill={C.mute}>{plain ? 'Voltage steps (mV)' : 'V cmd (mV)'}</text>
           <g clipPath={`url(#pl-${clip})`}>
             {(paths.find((p) => p.cmd.length) ?? paths[0])?.cmd.map((d, k) => (
               <path key={k} d={d} fill="none" stroke={C.dim} strokeWidth={0.8} strokeOpacity={hiSweep === k ? 1 : 0.55} />
@@ -251,8 +256,8 @@ export function VoltageClampPanel({
 
           {/* current traces */}
           <GridY scale={sy} ticks={iTicks} x0={M.l} x1={M.l + iw} />
-          <YAxis scale={sy} x={M.l} ticks={iTicks} label="I (pA/pF)" />
-          <XAxis scale={sx} y={top + plotH} ticks={tTicks} label="t (ms)" />
+          <YAxis scale={sy} x={M.l} ticks={iTicks} label={plain ? 'Current (pA/pF)' : 'I (pA/pF)'} />
+          <XAxis scale={sx} y={top + plotH} ticks={tTicks} label={plain ? 'time (ms)' : 't (ms)'} />
           <g clipPath={`url(#pl-${clip})`}>
             {paths.map((p) => (
               <g key={p.key} clipPath={p.key === 'variant' ? `url(#rv-${clip})` : undefined}>
@@ -289,12 +294,12 @@ export function VoltageClampPanel({
       <div className="absolute right-2 font-mono text-[10px] text-right leading-[13px] pointer-events-none" style={{ top: M.t + insetH + 14 }}>
         {readout?.best ? (
           <div className="px-1.5 py-1 bg-bg/90 border border-line rounded">
-            <div style={{ color: readout.best.fam.color }}>{readout.best.fam.key === 'reference' ? 'REFERENCE' : 'VARIANT'} · {reference.protocol.sweeps[readout.best.sweep].label}</div>
+            <div style={{ color: readout.best.fam.color }}>{readout.best.fam.key === 'reference' ? (plain ? 'NORMAL' : 'REFERENCE') : plain ? 'PATIENT' : 'VARIANT'} · {reference.protocol.sweeps[readout.best.sweep].label}</div>
             <div className="text-ink">t {readout.t.toFixed(2)} ms · I {readout.best.i.toFixed(1)} pA/pF</div>
             <div className="text-dim">V {readout.best.v.toFixed(0)} mV</div>
           </div>
         ) : variantPending && mode !== 'reference' ? (
-          <div className="px-1.5 py-1 bg-bg/90 border border-line2 rounded text-dim">VARIANT · NOT YET CHARACTERIZED</div>
+          <div className="px-1.5 py-1 bg-bg/90 border border-line2 rounded text-dim">{plain ? 'PATIENT · NOT TESTED YET' : 'VARIANT · NOT YET CHARACTERIZED'}</div>
         ) : null}
       </div>
     </div>

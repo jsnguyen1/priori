@@ -4,7 +4,8 @@ import { motion } from 'motion/react';
 import type { EvidenceArtifact, EvidenceNodeId, ReuseAssessment, ReuseClass } from '../../domain/types';
 import { C, REUSE_STYLE } from '../../ui/tokens';
 import { EDGES, NODE_SHORT } from '../../sim/reuse';
-import { useReducedMotion, useWidth } from './shared';
+import { PLAIN_CLASS, PLAIN_NODE, useReducedMotion, useWidth } from './shared';
+import { useSimple } from '../../ui/simple';
 
 type Lane = 'A' | 'B';
 const LAYOUT: Record<EvidenceNodeId, { lane: Lane; row: number }> = {
@@ -21,10 +22,10 @@ const LAYOUT: Record<EvidenceNodeId, { lane: Lane; row: number }> = {
   'regulatory-documentation': { lane: 'B', row: 7 },
 };
 
-const ROW_H = 42;
-const NODE_H = 28;
+const ROW_H_D = 42;
+const NODE_H_D = 28;
 const TOP = 26;
-const CHIP_W = 118;
+const CHIP_W_D = 118;
 
 export function ReuseGraph({
   assessment,
@@ -41,10 +42,15 @@ export function ReuseGraph({
 }) {
   const { ref, w } = useWidth<HTMLDivElement>(760);
   const reduced = useReducedMotion();
-  const W = Math.max(640, w);
+  const simple = useSimple();
+  // Simple view: no library chips, plain labels, slightly larger boxes.
+  const ROW_H = simple ? 46 : ROW_H_D;
+  const NODE_H = simple ? 34 : NODE_H_D;
+  const CHIP_W = simple ? 0 : CHIP_W_D;
+  const W = Math.max(simple ? 520 : 640, w);
   const H = TOP + 8 * ROW_H + 6;
-  const nodeW = Math.min(200, (W - 2 * CHIP_W - 120) / 2);
-  const laneX: Record<Lane, number> = { A: CHIP_W + 40, B: W - CHIP_W - 40 - nodeW };
+  const nodeW = simple ? Math.min(250, (W - 140) / 2) : Math.min(200, (W - 2 * CHIP_W - 120) / 2);
+  const laneX: Record<Lane, number> = simple ? { A: 20, B: W - 20 - nodeW } : { A: CHIP_W + 40, B: W - CHIP_W - 40 - nodeW };
   const pos = (id: EvidenceNodeId) => {
     const l = LAYOUT[id];
     return { x: laneX[l.lane], y: TOP + l.row * ROW_H, lane: l.lane };
@@ -64,10 +70,19 @@ export function ReuseGraph({
           </marker>
         </defs>
         {/* zone headers */}
-        <text x={4} y={12} className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>LIBRARY · {sourcePatientLabel}</text>
-        <text x={laneX.A} y={12} className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>BIOLOGY &amp; EFFICACY</text>
-        <text x={laneX.B} y={12} className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>PLATFORM · CMC · REGULATORY</text>
-        <text x={W - 4} y={12} textAnchor="end" className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>LIBRARY · {sourcePatientLabel}</text>
+        {simple ? (
+          <>
+            <text x={laneX.A} y={12} fontSize={11} letterSpacing="0.08em" fill={C.mute}>THE BIOLOGY · DOES IT WORK?</text>
+            <text x={laneX.B} y={12} fontSize={11} letterSpacing="0.08em" fill={C.mute}>MAKING &amp; APPROVING THE DRUG</text>
+          </>
+        ) : (
+          <>
+            <text x={4} y={12} className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>LIBRARY · {sourcePatientLabel}</text>
+            <text x={laneX.A} y={12} className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>BIOLOGY &amp; EFFICACY</text>
+            <text x={laneX.B} y={12} className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>PLATFORM · CMC · REGULATORY</text>
+            <text x={W - 4} y={12} textAnchor="end" className="font-mono" fontSize={9} letterSpacing="0.1em" fill={C.dim}>LIBRARY · {sourcePatientLabel}</text>
+          </>
+        )}
 
         {/* dependency edges */}
         <g key={`e-${key}`}>
@@ -121,7 +136,7 @@ export function ReuseGraph({
 
         {/* source chips → nodes */}
         <g key={`c-${key}`}>
-          {assessment?.nodes.map((n) => {
+          {!simple && assessment?.nodes.map((n) => {
             const p = pos(n.nodeId);
             const srcs = n.sourceArtifactIds.map((id) => byId.get(id)).filter((a): a is EvidenceArtifact => !!a && a.provenance.originatingPatientId !== null);
             if (srcs.length === 0) return null;
@@ -172,7 +187,7 @@ export function ReuseGraph({
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3, delay: delay(row) }}
                 role="button"
-                aria-label={`${NODE_SHORT[id]}${c ? ` — ${s!.label}` : ''}`}
+                aria-label={`${simple ? PLAIN_NODE[id] : NODE_SHORT[id]}${c ? `, ${simple ? PLAIN_CLASS[c].label : s!.label}` : ''}`}
               >
                 <rect
                   x={p.x}
@@ -187,10 +202,21 @@ export function ReuseGraph({
                   strokeDasharray={s?.dash || undefined}
                 />
                 {sel && <rect x={p.x - 3} y={p.y - 3} width={nodeW + 6} height={NODE_H + 6} rx={3} fill="none" stroke={C.ink} strokeOpacity={0.35} />}
-                <text x={p.x + 8} y={p.y + 18} className="font-mono" fontSize={10} letterSpacing="0.04em" fill={C.ink}>{NODE_SHORT[id]}</text>
-                <text x={p.x + nodeW - 7} y={p.y + 18} textAnchor="end" className="font-mono" fontSize={8.5} letterSpacing="0.06em" fill={s ? s.color : C.dim}>
-                  {s ? s.short : '—'}
-                </text>
+                {simple ? (
+                  <>
+                    <text x={p.x + 10} y={p.y + 21.5} fontSize={13} fill={C.ink}>{PLAIN_NODE[id]}</text>
+                    <text x={p.x + nodeW - 9} y={p.y + 21} textAnchor="end" className="font-mono" fontSize={10} letterSpacing="0.06em" fill={c ? s!.color : C.dim}>
+                      {c ? PLAIN_CLASS[c].short : ''}
+                    </text>
+                  </>
+                ) : (
+                  <>
+                    <text x={p.x + 8} y={p.y + 18} className="font-mono" fontSize={10} letterSpacing="0.04em" fill={C.ink}>{NODE_SHORT[id]}</text>
+                    <text x={p.x + nodeW - 7} y={p.y + 18} textAnchor="end" className="font-mono" fontSize={8.5} letterSpacing="0.06em" fill={s ? s.color : C.dim}>
+                      {s ? s.short : 'n/a'}
+                    </text>
+                  </>
+                )}
               </motion.g>
             );
           })}
@@ -201,12 +227,13 @@ export function ReuseGraph({
 }
 
 export function ReuseLegend({ className }: { className?: string }) {
+  const simple = useSimple();
   return (
     <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${className ?? ''}`}>
       {(Object.keys(REUSE_STYLE) as ReuseClass[]).map((k) => (
-        <span key={k} className="inline-flex items-center gap-1.5 font-mono text-2xs text-mute">
-          <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke={REUSE_STYLE[k].color} strokeWidth="1.6" strokeDasharray={REUSE_STYLE[k].dash} /></svg>
-          {REUSE_STYLE[k].label}
+        <span key={k} className={simple ? 'inline-flex items-center gap-2 text-[13px] text-ink' : 'inline-flex items-center gap-1.5 font-mono text-2xs text-mute'}>
+          <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke={REUSE_STYLE[k].color} strokeWidth={simple ? 2 : 1.6} strokeDasharray={REUSE_STYLE[k].dash} /></svg>
+          {simple ? PLAIN_CLASS[k].label : REUSE_STYLE[k].label}
         </span>
       ))}
     </div>

@@ -31,7 +31,7 @@ export function NavRail() {
           <button
             key={m.id}
             onClick={() => setModule(m.id)}
-            title={`${m.num} — ${m.label}`}
+            title={`${m.num} · ${m.label}`}
             className={cx(
               'relative flex flex-col items-center justify-center gap-1 h-[58px] mx-1.5 rounded transition-colors',
               active ? 'text-cyan bg-surface' : 'text-mute hover:text-ink hover:bg-surface/60',

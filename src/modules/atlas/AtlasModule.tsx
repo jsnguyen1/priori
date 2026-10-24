@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../state/store';
 import { Workspace } from '../../ui/Workspace';
 import { EmptyState } from '../../ui/primitives';
-import { getAtlasIndex } from './atlasData';
+import { MECHS, getAtlasIndex } from './atlasData';
 import { runSearch } from './atlasSearch';
 import { AtlasCanvas, type AtlasCanvasHandle } from './AtlasCanvas';
 import { AtlasSidebar } from './AtlasSidebar';
 import { AtlasInspector } from './AtlasInspector';
 import { characterizationStatus, mechanismKnown } from './evidenceStatus';
+import { BigStat, Headline } from '../../ui/simple';
+import { C } from '../../ui/tokens';
 
 /** Last atlasFocus nonce this module animated to (persists across mounts). */
 let handledNonce = -1;
@@ -94,6 +96,19 @@ export function AtlasModule() {
     [index, setQuery, fitTo],
   );
 
+  // Screen takeaway: how much of the (simulated) atlas still has no clear answer. Patient variants excluded.
+  const unknown = useMemo(() => {
+    let n = 0;
+    let u = 0;
+    for (let k = 0; k < index.n; k++) {
+      if (index.variants[k].patientIds.length) continue;
+      n++;
+      if (MECHS[index.mech[k]] === 'indeterminate') u++;
+    }
+    return { n, pct: n ? Math.round((u / n) * 100) : 0 };
+  }, [index]);
+  const approxN = unknown.n >= 1000 ? `${(Math.floor(unknown.n / 100) * 100).toLocaleString('en-US')}+` : unknown.n.toLocaleString('en-US');
+
   const status = selected >= 0 ? characterizationStatus(index.variants[selected], analyses, revealed) : 'atlas-record';
 
   return (
@@ -116,7 +131,18 @@ export function AtlasModule() {
       }
       inspector={selected >= 0 ? <AtlasInspector index={index} i={selected} status={status} onHighlight={highlight} /> : <EmptyState title="No variant selected" detail="Click a record in the landscape or search by ID, position, region or patient." />}
     >
-      <AtlasCanvas ref={canvasRef} index={index} mask={search.mask} hidden={hidden} selected={selected} onSelect={selectFromCanvas} />
+      <div className="absolute inset-0 flex flex-col">
+        <Headline
+          step="2 / 6"
+          className="border-b border-line2 bg-bg"
+          title={<>A map of {approxN} possible gene changes. Colour shows what each one does to the channel.</>}
+          sub="Left to right runs along the protein. Higher up means the change makes the channel too active; lower down, too weak."
+          right={<BigStat value={`${unknown.pct}%`} label="are still unknown" color={C.ink} note="simulated data" />}
+        />
+        <div className="relative flex-1 min-h-0">
+          <AtlasCanvas ref={canvasRef} index={index} mask={search.mask} hidden={hidden} selected={selected} onSelect={selectFromCanvas} />
+        </div>
+      </div>
     </Workspace>
   );
 }

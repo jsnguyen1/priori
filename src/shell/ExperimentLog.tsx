@@ -70,7 +70,7 @@ export function ExperimentLog() {
                   <tr key={e.id} className="border-b border-line2/60 hover:bg-surface/60">
                     <td className="pl-3 pr-3 py-[3px] text-dim whitespace-nowrap w-[70px]">{fmt.time(e.t)}</td>
                     <td className="pr-3 py-[3px] text-dim whitespace-nowrap w-[80px]">{new Date(sessionStart + e.t).toTimeString().slice(0, 8)}</td>
-                    <td className="pr-3 py-[3px] whitespace-nowrap w-[64px] text-mute">{e.patientId ?? '—'}</td>
+                    <td className="pr-3 py-[3px] whitespace-nowrap w-[64px] text-mute">{e.patientId ?? 'n/a'}</td>
                     <td className="pr-3 py-[3px] whitespace-nowrap w-[230px]" style={{ color: TYPE_COLOR[e.type] ?? C.mute }}>
                       {e.type}
                     </td>

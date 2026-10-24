@@ -80,7 +80,7 @@ export const STEPS: NarrativeStep[] = [
     cue: '0:45–1:20',
     act: 'I',
     title: 'Mechanism Atlas',
-    presenterNote: 'The variant landscape. Focus on PX-001’s variant; show what prior regional evidence suggests — and what it cannot establish.',
+    presenterNote: 'The variant landscape. Focus on PX-001’s variant; show what prior regional evidence suggests, and what it cannot establish.',
     module: 'atlas',
     apply: () => {
       ensurePatient(PRIMARY_PATIENT_ID);

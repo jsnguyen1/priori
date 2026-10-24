@@ -22,6 +22,7 @@ import {
   type Chunk,
 } from './structure';
 import { MEASUREMENT_LINK, useLabUi, useVariantStatus } from './labUi';
+import { Headline, useSimple } from '../../ui/simple';
 
 /** Minimal surface of three-stdlib OrbitControls used here. */
 interface OrbitControlsImpl {
@@ -332,6 +333,7 @@ function SphereProtein() {
 const noRaycast = () => null;
 
 function Membrane() {
+  const simple = useSimple();
   const ref = useRef<THREE.InstancedMesh>(null);
   const heads = useMemo(() => lipidHeadgroups(), []);
   const geom = useMemo(() => new THREE.SphereGeometry(1.45, 10, 7), []);
@@ -373,13 +375,13 @@ function Membrane() {
         <meshStandardMaterial color="#62737F" roughness={0.85} metalness={0} transparent opacity={0.8} />
       </instancedMesh>
       <Html position={[-22, 31, 40]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-        <SideLabel text="EXTRACELLULAR" arrow="▲" />
+        <SideLabel text={simple ? 'OUTSIDE THE CELL' : 'EXTRACELLULAR'} arrow="▲" />
       </Html>
       <Html position={[-22, -31, 40]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-        <SideLabel text="INTRACELLULAR" arrow="▼" />
+        <SideLabel text={simple ? 'INSIDE THE CELL' : 'INTRACELLULAR'} arrow="▼" />
       </Html>
       <Html position={[-22, 0, 40]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-        <div className="font-mono text-[9px] tracking-[0.12em] text-dim whitespace-nowrap">BILAYER · ~30 Å</div>
+        <div className="font-mono text-[9px] tracking-[0.12em] text-dim whitespace-nowrap">{simple ? 'CELL MEMBRANE' : 'BILAYER · ~30 Å'}</div>
       </Html>
     </group>
   );
@@ -400,12 +402,13 @@ const AXIS_TOP = 56;
 const AXIS_BOTTOM = -48;
 
 function PoreAxis() {
+  const simple = useSimple();
   return (
     <group>
       <Line points={[[0, AXIS_TOP, 0], [0, AXIS_BOTTOM, 0]]} color={C.dim} lineWidth={1} dashed dashSize={2.2} gapSize={2.2} raycast={noRaycast} />
-      <Html position={[0, AXIS_TOP + 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+      {!simple && <Html position={[0, AXIS_TOP + 4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
         <div className="font-mono text-[9px] tracking-[0.12em] text-dim whitespace-nowrap">PORE AXIS</div>
-      </Html>
+      </Html>}
     </group>
   );
 }
@@ -472,7 +475,7 @@ function Ions({ fraction, animate }: { fraction: number; animate: boolean }) {
 
 // ─── Mutation marker ─────────────────────────────────────────────────────
 
-function MutationMarker({ pos, color, label, sub, pulse }: { pos: THREE.Vector3; color: string; label: string; sub: string; pulse: boolean }) {
+function MutationMarker({ pos, color, label, sub, pulse, big = false }: { pos: THREE.Vector3; color: string; label: string; sub: string; pulse: boolean; big?: boolean }) {
   const halo = useRef<THREE.MeshBasicMaterial>(null);
   const labelPos = useMemo(() => {
     const radial = new THREE.Vector3(pos.x, 0, pos.z);
@@ -501,9 +504,9 @@ function MutationMarker({ pos, color, label, sub, pulse }: { pos: THREE.Vector3;
       </Billboard>
       <Line points={[pos, labelPos]} color={color} lineWidth={1} transparent opacity={0.8} depthTest={false} raycast={noRaycast} />
       <Html position={labelPos} zIndexRange={[20, 10]} style={{ pointerEvents: 'none' }}>
-        <div className="-translate-y-1/2 pl-1.5 whitespace-nowrap">
-          <div className="font-mono text-[11px] leading-tight" style={{ color }}>{label}</div>
-          <div className="font-mono text-[9px] leading-tight text-mute">{sub}</div>
+        <div className={cx('-translate-y-1/2 ml-1.5 whitespace-nowrap', big && 'px-2 py-1 rounded bg-bg/85 border border-line2')}>
+          <div className={cx('leading-tight', big ? 'text-[13px] font-medium' : 'font-mono text-[11px]')} style={{ color }}>{label}</div>
+          <div className={cx('font-mono leading-tight text-mute', big ? 'text-[10px] mt-0.5' : 'text-[9px]')}>{sub}</div>
         </div>
       </Html>
     </group>
@@ -551,6 +554,7 @@ export function MolecularViewer() {
   const region = variant ? regionAt(variant.position) : null;
 
   const [ready, setReady] = useState(false);
+  const simple = useSimple();
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-canvas" data-tour="lab.viewer">
@@ -572,17 +576,39 @@ export function MolecularViewer() {
           <MutationMarker
             pos={mutationPos}
             color={classified ? mechColor : C.ink}
-            label={`${variant.hgvsP}`}
-            sub={anchor?.resolved ? `residue ${variant.position} · ${region?.label ?? ''}` : `residue ${variant.position} unresolved · shown at ${anchor?.residue.res}`}
+            label={simple ? 'Patient’s change' : `${variant.hgvsP}`}
+            sub={simple ? `${variant.refAA}${variant.position}${variant.altAA} · ${region?.label ?? ''}` : anchor?.resolved ? `residue ${variant.position} · ${region?.label ?? ''}` : `residue ${variant.position} unresolved · shown at ${anchor?.residue.res}`}
             pulse={ionsAnimate}
+            big={simple}
           />
         )}
         <CameraRig mutationPos={mutationPos} />
         <OrbitControls makeDefault enableDamping dampingFactor={0.09} rotateSpeed={0.6} zoomSpeed={0.8} panSpeed={0.7} minDistance={30} maxDistance={700} />
       </Canvas>
 
+      {/* ── Simple: headline + minimal controls ── */}
+      {simple && (
+        <div className="absolute top-0 left-0 right-0 pointer-events-none bg-gradient-to-b from-canvas via-canvas/85 to-transparent pb-6">
+          <Headline
+            step="3 / 6"
+            title="Test the patient’s channel in a simulated experiment."
+            sub="This is the real 3D shape of the sodium channel. The glowing ring marks the patient’s change."
+            right={
+              <div className="flex items-center gap-1.5 pointer-events-auto">
+                <Button size="sm" onClick={() => requestCamera('mutation')} disabled={!variant}>
+                  <Crosshair size={12} /> <span className="whitespace-nowrap">Focus</span>
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => requestCamera('overview')}>
+                  <RotateCcw size={12} /> Reset
+                </Button>
+              </div>
+            }
+          />
+        </div>
+      )}
+
       {/* ── Toolbar ── */}
-      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between gap-2 pointer-events-none">
+      {!simple && <div className="absolute top-2.5 left-2.5 right-2.5 flex items-start justify-between gap-2 pointer-events-none">
         <div className="flex items-center gap-1.5 pointer-events-auto">
           <Segmented
             value={lab.representation}
@@ -610,13 +636,13 @@ export function MolecularViewer() {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── Hover / linkage readout ── */}
-      <div className="absolute top-11 left-2.5 flex flex-col gap-1 pointer-events-none">
+      <div className={cx('absolute left-2.5 flex flex-col gap-1 pointer-events-none', simple ? 'top-[120px] left-6' : 'top-11')}>
         {hoverRegion && (
           <div className="px-2 py-1 border border-line bg-bg/90 rounded font-mono text-[10px] text-ink">
-            {hoverRegion.label} <span className="text-dim">· {hoverRegion.start}–{hoverRegion.end} · {hoverRegion.topology} · click to select</span>
+            {hoverRegion.label} <span className="text-dim">{simple ? '· click to zoom' : `· ${hoverRegion.start}–${hoverRegion.end} · ${hoverRegion.topology} · click to select`}</span>
           </div>
         )}
         {linkKey && (
@@ -627,7 +653,7 @@ export function MolecularViewer() {
       </div>
 
       {/* ── Focused region annotation ── */}
-      {focusRegion && !linkKey && (
+      {focusRegion && !linkKey && !simple && (
         <div className="absolute left-2.5 bottom-[74px] w-[300px] border border-line bg-bg/90 rounded px-2.5 py-2 pointer-events-auto">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[11px] text-ink">{focusRegion.label}</span>
@@ -640,17 +666,34 @@ export function MolecularViewer() {
       )}
 
       {/* ── Ion flux note ── */}
-      {lab.showIons && (
+      {lab.showIons && !simple && (
         <div className="absolute right-2.5 bottom-[74px] max-w-[300px] text-right pointer-events-none">
           <div className="font-mono text-[10px] text-mute">
             Na⁺ flux · {showingVariant ? 'VARIANT' : 'REFERENCE'} ·{' '}
             {showingVariant ? (variantFluxAvailable ? <span style={{ color: mechColor }}>{fmt.num(ratio, 2)}× reference conductance</span> : <span className="text-dim">not yet characterized · showing reference</span>) : '1.00× reference conductance'}
           </div>
-          <div className="font-mono text-[9px] text-dim">g(−10 mV) from shared gating model · Illustrative ion flux — not a molecular dynamics simulation</div>
+          <div className="font-mono text-[9px] text-dim">g(−10 mV) from shared gating model · Illustrative ion flux, not a molecular dynamics simulation</div>
         </div>
       )}
 
       {/* ── Provenance ── */}
+      {simple ? (
+        <div className={cx('absolute left-0 right-0 bottom-0 px-6 h-9 border-t border-line2 bg-bg/85 flex items-center justify-between gap-4 text-[12px] text-mute transition-opacity', ready ? 'opacity-100' : 'opacity-0')}>
+          <span className="flex items-center gap-2">
+            <EvidenceBadge category="published" />
+            Published 3D structure (PDB 6J8E) · patient change marked
+          </span>
+          <span className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-1.5">
+              {DOMAIN_LEGEND.filter((d) => d.id !== 'linker').map((d) => (
+                <span key={d.id} className="inline-block w-2 h-2 rounded-[1px]" style={{ background: DOMAIN_COLOR[d.id] }} />
+              ))}
+              <span className="ml-0.5">4 sections</span>
+            </span>
+            {lab.showIons && <span><span className="text-ink">•</span> sodium flow (illustrative)</span>}
+          </span>
+        </div>
+      ) : (
       <div className={cx('absolute left-0 right-0 bottom-0 px-2.5 py-1.5 border-t border-line2 bg-bg/85 flex flex-col gap-0.5 transition-opacity', ready ? 'opacity-100' : 'opacity-0')}>
         <div className="flex items-center gap-2 font-mono text-[10px] text-mute">
           <EvidenceBadge category="published" />
@@ -660,10 +703,11 @@ export function MolecularViewer() {
           <EvidenceBadge category="hypothetical" />
           <span>
             {variant ? `${variant.hgvsP} · ` : ''}Mutation position mapped by residue number; structural effect not modeled
-            {anchor && !anchor.resolved && <span className="text-warn"> · residue {variant?.position} unresolved in 6J8E — marker at nearest resolved residue {anchor.residue.res}</span>}
+            {anchor && !anchor.resolved && <span className="text-warn"> · residue {variant?.position} unresolved in 6J8E, marker at nearest resolved residue {anchor.residue.res}</span>}
           </span>
         </div>
       </div>
+      )}
     </div>
   );
 }

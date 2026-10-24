@@ -33,7 +33,7 @@ export function DecisionControls({ decision, onDecide }: { decision: Decision | 
               )}
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-md tracking-[0.1em] text-ink">{o.label}</span>
+                <span className="font-mono text-md tracking-[0.1em] text-ink">{simple && o.choice === 'withhold' ? 'WITHHOLD' : o.label}</span>
                 <span className="font-mono text-2xs text-dim border border-line2 rounded-sm px-1">{chosen ? 'SELECTED' : o.key}</span>
               </div>
               <div className={simple ? 'mt-1.5 text-[14px] text-mute' : 'mt-1.5 text-xs text-mute'}>{simple ? o.plainSub : o.sub}</div>

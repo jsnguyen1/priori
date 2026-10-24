@@ -15,12 +15,15 @@ const VIEW_LABEL: Record<View, string> = {
   regulatory: 'Regulatory',
 };
 const N = 30;
-const H = 230;
+const H_DETAIL = 230;
+const H_SIMPLE = 210;
 const M = { l: 52, r: 96, t: 14, b: 28 };
 
-export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
+export function CohortChart({ scenarioId, simple = false }: { scenarioId: ReuseScenarioId; simple?: boolean }) {
   const { ref, w } = useWidth<HTMLDivElement>(900);
-  const [view, setView] = useState<View>('total');
+  const [viewState, setView] = useState<View>('total');
+  const view: View = simple ? 'total' : viewState;
+  const H = simple ? H_SIMPLE : H_DETAIL;
   const [hover, setHover] = useState<number | null>(null);
   const model = useMemo(() => cohortModel(scenarioId, N), [scenarioId]);
   const W = Math.max(560, w);
@@ -47,6 +50,12 @@ export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
 
   return (
     <div>
+      {simple ? (
+        <div className="flex items-center gap-5 mb-2 text-[12px] text-mute">
+          <span className="inline-flex items-center gap-1.5"><svg width="18" height="6"><line x1="0" x2="18" y1="3" y2="3" stroke={C.mute} strokeWidth="2" /></svg>Starting from scratch every time</span>
+          <span className="inline-flex items-center gap-1.5"><svg width="18" height="6"><line x1="0" x2="18" y1="3" y2="3" stroke={C.cyan} strokeWidth="2" /></svg>With Priori</span>
+        </div>
+      ) : (
       <div className="flex items-center justify-between gap-3 mb-2">
         <Segmented value={view} onChange={setView} options={(['total', ...COST_CATEGORIES] as View[]).map((v) => ({ value: v, label: VIEW_LABEL[v] }))} />
         <div className="flex items-center gap-3 font-mono text-2xs text-mute">
@@ -55,6 +64,7 @@ export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
           <EvidenceBadge category="assumption" />
         </div>
       </div>
+      )}
       <div ref={ref} className="w-full relative">
         <svg
           width={W}
@@ -76,7 +86,7 @@ export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
           {[0, 5, 10, 15, 20, 25, 30].map((n) => (
             <text key={n} x={x(n)} y={H - 12} textAnchor="middle" className="font-mono" fontSize={9} fill={C.dim}>{n}</text>
           ))}
-          <text x={M.l + pw} y={H - 1} textAnchor="end" className="font-mono" fontSize={9} fill={C.dim}>patients in cohort</text>
+          <text x={M.l + pw} y={H - 1} textAnchor="end" className="font-mono" fontSize={9} fill={C.dim}>{simple ? 'number of patients treated' : 'patients in cohort'}</text>
           <line x1={M.l} x2={M.l + pw} y1={y(0)} y2={y(0)} stroke={C.line} />
 
           {view === 'total' && <path d={band((s) => s.b.low, (s) => s.b.high)} fill={C.mute} fillOpacity={0.08} />}
@@ -89,18 +99,18 @@ export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
             <g>
               <line x1={x(0)} x2={x(0)} y1={y(fixed.low)} y2={y(fixed.high)} stroke={C.cyan} strokeWidth={3} strokeOpacity={0.5} />
               <circle cx={x(0)} cy={y(fixed.mid)} r={4} fill={C.cyan} stroke={C.canvas} strokeWidth={2} />
-              <text x={x(0) + 8} y={y(fixed.mid) - 6} className="font-mono" fontSize={9} fill={C.ink}>fixed platform investment {fmt.usd(fixed.mid)}</text>
+              <text x={x(0) + 8} y={y(fixed.mid) - (simple ? 16 : 6)} className="font-mono" fontSize={9} fill={C.ink}>{simple ? `upfront cost to build the library ${fmtM(fixed.mid)}` : `fixed platform investment ${fmt.usd(fixed.mid)}`}</text>
             </g>
           )}
           {cross !== null && (
             <g>
               <line x1={x(cross)} x2={x(cross)} y1={M.t} y2={y(0)} stroke={C.ink} strokeOpacity={0.5} strokeDasharray="2 3" />
-              <text x={x(cross) + 4} y={M.t + 9} className="font-mono" fontSize={9} fill={C.ink}>mid-case crossover n = {cross} (scenario-dependent)</text>
+              <text x={x(cross) + 4} y={M.t + 9} className="font-mono" fontSize={9} fill={C.ink}>{simple ? `cheaper overall from patient ${cross}` : `mid-case crossover n = ${cross} (scenario-dependent)`}</text>
             </g>
           )}
           {/* direct labels */}
-          <text x={x(N) + 6} y={y(last.b.mid) + 3} className="font-mono" fontSize={9.5} fill={C.ink}>Bespoke {fmtM(last.b.mid)}</text>
-          <text x={x(N) + 6} y={y(last.p.mid) + (Math.abs(y(last.p.mid) - y(last.b.mid)) < 12 ? (last.p.mid < last.b.mid ? 14 : -8) : 3)} className="font-mono" fontSize={9.5} fill={C.ink}>Platform {fmtM(last.p.mid)}</text>
+          <text x={x(N) + 6} y={y(last.b.mid) + 3} className="font-mono" fontSize={9.5} fill={C.ink}>{simple ? 'Scratch' : 'Bespoke'} {fmtM(last.b.mid)}</text>
+          <text x={x(N) + 6} y={y(last.p.mid) + (Math.abs(y(last.p.mid) - y(last.b.mid)) < 12 ? (last.p.mid < last.b.mid ? 14 : -8) : 3)} className="font-mono" fontSize={9.5} fill={C.ink}>{simple ? 'Priori' : 'Platform'} {fmtM(last.p.mid)}</text>
 
           {h && (
             <g pointerEvents="none">
@@ -112,12 +122,29 @@ export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
         </svg>
         {h && (
           <div className="absolute top-2 pointer-events-none bg-surface2 border border-line rounded px-2 py-1.5 font-mono text-2xs text-ink" style={{ left: Math.min(x(h.n) + 12, W - 230) }}>
-            <div className="text-mute mb-0.5">n = {h.n} patients · coverage {fmt.pct(model.points[h.n].coverage)}</div>
-            <div>Bespoke {fmtM(h.b.mid)}{view === 'total' && <span className="text-dim"> ({fmtM(h.b.low)}–{fmtM(h.b.high)})</span>}</div>
-            <div className="text-cyan">Platform {fmtM(h.p.mid)}{view === 'total' && <span className="text-dim"> ({fmtM(h.p.low)}–{fmtM(h.p.high)})</span>}</div>
+            {simple ? (
+              <>
+                <div className="text-mute mb-0.5">After {h.n} patients · total spent</div>
+                <div>From scratch {fmtM(h.b.mid)}</div>
+                <div className="text-cyan">With Priori {fmtM(h.p.mid)}</div>
+              </>
+            ) : (
+              <>
+                <div className="text-mute mb-0.5">n = {h.n} patients · coverage {fmt.pct(model.points[h.n].coverage)}</div>
+                <div>Bespoke {fmtM(h.b.mid)}{view === 'total' && <span className="text-dim"> ({fmtM(h.b.low)}–{fmtM(h.b.high)})</span>}</div>
+                <div className="text-cyan">Platform {fmtM(h.p.mid)}{view === 'total' && <span className="text-dim"> ({fmtM(h.p.low)}–{fmtM(h.p.high)})</span>}</div>
+              </>
+            )}
           </div>
         )}
       </div>
+      {simple ? (
+        <div className="mt-2 text-[13px] text-mute leading-[19px]">
+          {model.crossoverN !== null
+            ? `Priori costs more at first, because the library has to be built. In this estimate it becomes cheaper overall from patient ${model.crossoverN}; where exactly depends on our assumptions.`
+            : 'Priori costs more at first, because the library has to be built. In this estimate it does not pay that back within 30 patients; the answer depends on our assumptions.'}
+        </div>
+      ) : (
       <div className="mt-1.5 text-2xs text-dim leading-relaxed">
         Scenario model, not a guarantee. Cumulative cost, mid case with low–high scenario band. Platform = fixed investment ({fmt.usd(fixed.low)}–{fmt.usd(fixed.high)}) + per-patient marginal cost, where the reusable share grows with library coverage
         c(k) = {model.assumptions.maxCoverage.toFixed(2)}·(1 − e<sup>−(k−1)/{model.assumptions.coverageScale}</sup>) plus {fmt.usd(model.assumptions.perPatientOverheadUsd)}/patient curation overhead.
@@ -128,6 +155,7 @@ export function CohortChart({ scenarioId }: { scenarioId: ReuseScenarioId }) {
           : ' Category view excludes the fixed platform investment.'}
         {' '}Manufacturing, clinical and regulatory costs are modelled separately from evidence generation; patient-specific GMP synthesis, sequence-specific toxicology and clinical evaluation never shrink.
       </div>
+      )}
     </div>
   );
 }

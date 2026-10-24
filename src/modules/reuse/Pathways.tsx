@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import type { ReuseAssessment } from '../../domain/types';
 import { REUSE_STYLE, MOTION } from '../../ui/tokens';
 import { NODE_IDS, NODE_SHORT, tallyClasses } from '../../sim/reuse';
-import { REUSE_ORDER, useReducedMotion } from './shared';
+import { PLAIN_CLASS, PLAIN_NODE, REUSE_ORDER, useReducedMotion } from './shared';
 
 export function Pathways({ rows }: { rows: { label: string; sub: string; assessment: ReuseAssessment }[] }) {
   const reduced = useReducedMotion();
@@ -30,7 +30,7 @@ export function Pathways({ rows }: { rows: { label: string; sub: string; assessm
                   <motion.div
                     key={n}
                     className="border-t border-line2 py-1.5 px-0.5 flex flex-col justify-center gap-1"
-                    title={`${node.label} — ${s.label}`}
+                    title={`${node.label} · ${s.label}`}
                     initial={reduced ? false : { opacity: 0, y: 3 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: MOTION.base, delay: reduced ? 0 : ri * 0.5 + i * 0.05, ease: MOTION.ease }}
@@ -49,6 +49,49 @@ export function Pathways({ rows }: { rows: { label: string; sub: string; assessm
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Simple view: two rows of 11 coloured blocks, one count per row. */
+export function SimplePathways({ rows }: { rows: { label: string; sub: string; assessment: ReuseAssessment }[] }) {
+  const reduced = useReducedMotion();
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end text-[12px] text-dim -mb-1">carried over</div>
+      {rows.map((r, ri) => {
+        const t = tallyClasses(r.assessment);
+        const carried = t.reusable + t['reuse-with-validation'];
+        return (
+          <div key={r.label} className="flex items-center gap-4">
+            <div className="w-[96px] shrink-0">
+              <div className="text-[14px] text-ink">{r.label}</div>
+              <div className="text-[12px] text-dim">{r.sub}</div>
+            </div>
+            <div className="flex gap-[3px] flex-1 min-w-0">
+              {NODE_IDS.map((n, i) => {
+                const node = r.assessment.nodes.find((x) => x.nodeId === n)!;
+                const s = REUSE_STYLE[node.reuseClass];
+                return (
+                  <motion.div
+                    key={n}
+                    title={`${PLAIN_NODE[n]} · ${PLAIN_CLASS[node.reuseClass].label}`}
+                    className="h-[22px] flex-1 rounded-[2px] border"
+                    style={{ borderColor: s.color, borderStyle: node.reuseClass === 'reusable' ? 'solid' : node.reuseClass === 'reuse-with-validation' ? 'dashed' : 'dotted', background: `${s.color}${node.reuseClass === 'new-work' ? '10' : '30'}` }}
+                    initial={reduced ? false : { opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: MOTION.base, delay: reduced ? 0 : ri * 0.5 + i * 0.05, ease: MOTION.ease }}
+                  />
+                );
+              })}
+            </div>
+            <div className="w-[64px] shrink-0 text-right font-mono text-[14px] tabular-nums whitespace-nowrap">
+              <span style={{ color: carried ? REUSE_STYLE.reusable.color : undefined }} className={carried ? '' : 'text-mute'}>{carried}</span>
+              <span className="text-dim"> / {NODE_IDS.length}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

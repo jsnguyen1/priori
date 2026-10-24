@@ -62,7 +62,7 @@ export function PresentationOverlay() {
                 </div>
               </div>
               <div className="text-md text-ink mt-1">{cur.title}</div>
-              <div className="text-xs text-mute mt-0.5">{hint ? <span className="text-gof">{hint} — the judge must choose before continuing.</span> : cur.presenterNote}</div>
+              <div className="text-xs text-mute mt-0.5">{hint ? <span className="text-gof">{hint}, the judge must choose before continuing.</span> : cur.presenterNote}</div>
             </div>
             <button onClick={() => { const r = nextStep(); if (r.blocked) setHint(r.blocked); }} className="px-2.5 text-mute hover:text-cyan border-l border-line2" title="Next (→)">
               <ChevronRight size={15} />

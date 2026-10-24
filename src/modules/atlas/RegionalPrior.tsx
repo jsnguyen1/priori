@@ -14,10 +14,10 @@ function tally(index: AtlasIndex, idxs: number[]) {
   return c;
 }
 
-function StackBar({ counts }: { counts: number[] }) {
+export function StackBar({ counts, h = 8 }: { counts: number[]; h?: number }) {
   const total = counts.reduce((a, b) => a + b, 0) || 1;
   return (
-    <div className="flex h-[8px] w-full rounded-[1px] overflow-hidden bg-line2">
+    <div style={{ height: h }} className="flex w-full rounded-[1px] overflow-hidden bg-line2">
       {MECHS.map((m, k) => (counts[k] ? <span key={m} style={{ width: `${(counts[k] / total) * 100}%`, background: MECH_COLOR[m], opacity: m === 'indeterminate' ? 0.6 : 0.9 }} /> : null))}
     </div>
   );
@@ -35,7 +35,8 @@ function Counts({ counts }: { counts: number[] }) {
   );
 }
 
-export function RegionalPrior({ index, i, status, onHighlight }: { index: AtlasIndex; i: number; status: CharacterizationStatus; onHighlight: (q: string) => void }) {
+/** Tally of nearby (same-region) atlas records and the direction they lean, if any. */
+export function regionalPrior(index: AtlasIndex, i: number) {
   const v = index.variants[i];
   const region = regionById(v.regionId)!;
   const inRegion: number[] = [];
@@ -55,6 +56,12 @@ export function RegionalPrior({ index, i, status, onHighlight }: { index: AtlasI
     leanFrac = cm[k] / directional;
     if (leanFrac >= 0.65) lean = MECHS[k];
   }
+  return { region, measured, priorOnly, cm, cp, directional, lean, leanFrac };
+}
+
+export function RegionalPrior({ index, i, status, onHighlight }: { index: AtlasIndex; i: number; status: CharacterizationStatus; onHighlight: (q: string) => void }) {
+  const v = index.variants[i];
+  const { region, measured, priorOnly, cm, cp, directional, lean, leanFrac } = regionalPrior(index, i);
   const own = status === 'characterized' || status === 'atlas-record' ? getClassification(v.id).mechanism : null;
   const agrees = own && lean ? own === lean : null;
   const isPatient = v.patientIds.length > 0;

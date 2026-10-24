@@ -169,7 +169,7 @@ export function classify(variantId: string, profile: FunctionalProfile, opts: { 
   ];
   if (base.mechanism === 'mixed' || mechanism === 'mixed') limitations.push('Opposing effects: net neuronal consequence cannot be inferred from channel parameters alone.');
   if (indeterminateReason === 'low-confidence') limitations.push('Effect sizes are near decision boundaries relative to measurement uncertainty.');
-  if (indeterminateReason === 'insufficient-data') limitations.push('No direct functional measurement — classification based on regional computational prior only.');
+  if (indeterminateReason === 'insufficient-data') limitations.push('No direct functional measurement, classification based on regional computational prior only.');
   if (profile.peakDensity.n < 8) limitations.push(`Small sample (n = ${profile.peakDensity.n} cells).`);
 
   return {

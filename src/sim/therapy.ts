@@ -45,7 +45,7 @@ export const STRATEGIES: TherapeuticStrategy[] = [
     name: 'RNA expression upregulation',
     modality: 'ASO',
     rationale:
-      'Target a regulatory element in the untranslated regions — an upstream open reading frame or an NMD-linked element — so that a larger fraction of SCN2A transcript is productively translated. Acts on both alleles, so it raises output of the reference allele as well. Research-stage concept for loss-of-function / haploinsufficiency.',
+      'Target a regulatory element in the untranslated regions, an upstream open reading frame or an NMD-linked element, so that a larger fraction of SCN2A transcript is productively translated. Acts on both alleles, so it raises output of the reference allele as well. Research-stage concept for loss-of-function / haploinsufficiency.',
     applicableTo: ['LoF'],
     intendedEffect: 'increase-function',
     actsOn: 'gmaxScale',
@@ -145,7 +145,7 @@ export function recommendStrategies(classification: MechanismClassification): St
       relevance: 'primary',
       reason: `${INSUFFICIENT_EVIDENCE}: ${why}. Design decisions are deferred until the mechanism is resolved.`,
     };
-    const shared = `${INSUFFICIENT_EVIDENCE} — direction of effect is unknown, so an intervention intended to raise or lower channel function cannot be justified.`;
+    const shared = `${INSUFFICIENT_EVIDENCE}, direction of effect is unknown, so an intervention intended to raise or lower channel function cannot be justified.`;
     for (const s of STRATEGIES) {
       if (s.id === 'further-characterization') continue;
       rel[s.id] = { relevance: 'not-indicated', reason: shared };
@@ -157,7 +157,7 @@ export function recommendStrategies(classification: MechanismClassification): St
     };
     rel['splice-modulation'] = {
       relevance: 'secondary',
-      reason: 'Direction-matched alternative, but conditional on a usable non-productive exon existing in the relevant cell type — hypothetical in this model.',
+      reason: 'Direction-matched alternative, but conditional on a usable non-productive exon existing in the relevant cell type, hypothetical in this model.',
     };
     rel['further-characterization'] = {
       relevance: 'secondary',
@@ -227,7 +227,7 @@ export function recommendationHeadline(classification: MechanismClassification):
   const recs = recommendStrategies(classification);
   const primary = recs.find((r) => r.relevance === 'primary');
   if (!primary || primary.strategy.id === 'further-characterization') return INSUFFICIENT_EVIDENCE;
-  return `${primary.strategy.name} — direction-matched to ${classification.mechanism}`;
+  return `${primary.strategy.name}, direction-matched to ${classification.mechanism}`;
 }
 
 // ─── Schematic transcript model ──────────────────────────────────────────
@@ -469,14 +469,14 @@ function requirementsFor(
       platform === 'shared-chemistry'
         ? 'Synthesis on existing platform chemistry; release methods qualified per sequence.'
         : platform === 'modified-chemistry'
-          ? 'Backbone / sugar modification outside the current platform set — process and analytical bridging required.'
+          ? 'Backbone / sugar modification outside the current platform set, process and analytical bridging required.'
           : 'Novel chemistry: no platform reuse; full process development, analytics and class-safety work required.',
     );
   } else {
     out.push('Pharmacology, brain exposure and selectivity against other voltage-gated sodium channels unresolved.');
   }
   if (specificity < 0.7) out.push('Transcriptome-wide specificity assessment required (illustrative score below internal screening bar).');
-  if (uncertainty > 0.38) out.push('Model uncertainty high — additional in-vitro measurement required before any nomination.');
+  if (uncertainty > 0.38) out.push('Model uncertainty high, additional in-vitro measurement required before any nomination.');
   if (overlapsVariant) out.push('Binding window overlaps the variant site: allele discrimination must be demonstrated, not assumed.');
   if (strategy.id === 'splice-modulation') out.push('Requires experimental confirmation that the non-productive isoform is used in the relevant cell type.');
   if (strategy.id === 'rna-upregulation') out.push('Requires a dose–exposure relationship that keeps expression below the reference level.');

@@ -38,7 +38,7 @@ export function CommandPalette() {
   const base = useMemo<Command[]>(() => {
     const s = () => useStore.getState();
     const cmds: Command[] = [
-      ...MODULES.map((m, i) => ({ id: `nav-${m.id}`, group: 'Navigate', label: `${m.num} — ${m.label}`, hint: String(i + 1), run: () => s().setModule(m.id) })),
+      ...MODULES.map((m, i) => ({ id: `nav-${m.id}`, group: 'Navigate', label: `${m.num} · ${m.label}`, hint: String(i + 1), run: () => s().setModule(m.id) })),
       ...PATIENTS.map((p) => ({
         id: `pt-${p.id}`,
         group: 'Patients (hypothetical)',

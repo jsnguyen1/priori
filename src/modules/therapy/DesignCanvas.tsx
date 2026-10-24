@@ -13,6 +13,7 @@ import {
 } from '../../sim/therapy';
 import { C } from '../../ui/tokens';
 import { Button, Label, cx } from '../../ui/primitives';
+import { useSimple } from '../../ui/simple';
 import { REGION_STYLE } from './shared';
 
 function useWidth<T extends HTMLElement>() {
@@ -57,6 +58,7 @@ export function DesignCanvas({
   onSelectCandidate: (id: string) => void;
 }) {
   const { ref, w } = useWidth<HTMLDivElement>();
+  const simple = useSimple();
   const [win, setWin] = useState<[number, number]>([1, TRANSCRIPT_LENGTH]);
   const variantNt = transcriptPosForResidue(variant.position);
   const variantExon = exonForResidue(variant.position);
@@ -128,12 +130,20 @@ export function DesignCanvas({
   return (
     <div ref={ref} className="flex flex-col min-h-0 h-full">
       {/* overview + controls */}
-      <div className="flex items-center justify-between h-8 px-3 border-b border-line2 shrink-0">
-        <Label>Transcript design canvas · schematic</Label>
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] text-dim tabular-nums">
-            {win[0].toLocaleString()}–{win[1].toLocaleString()} nt · {(win[1] - win[0] + 1).toLocaleString()} nt window
+      <div className={cx('flex items-center justify-between px-3 border-b border-line2 shrink-0', simple ? 'h-9' : 'h-8')}>
+        {simple ? (
+          <span className="text-[13px] text-ink">
+            The gene message (RNA) <span className="text-mute">· {targetRegionId ? 'drug designs are drawn under it' : 'click a dashed box to pick where a drug acts'}</span>
           </span>
+        ) : (
+          <Label>Transcript design canvas · schematic</Label>
+        )}
+        <div className="flex items-center gap-1.5">
+          {!simple && (
+            <span className="font-mono text-[10px] text-dim tabular-nums">
+              {win[0].toLocaleString()}–{win[1].toLocaleString()} nt · {(win[1] - win[0] + 1).toLocaleString()} nt window
+            </span>
+          )}
           <Button size="sm" variant="ghost" onClick={() => zoom(0.6)} title="Zoom in">+</Button>
           <Button size="sm" variant="ghost" onClick={() => zoom(1.7)} title="Zoom out">−</Button>
           <Button size="sm" variant="ghost" onClick={() => setWin([1, TRANSCRIPT_LENGTH])} title="Fit transcript">FIT</Button>
@@ -149,7 +159,7 @@ export function DesignCanvas({
           setWin([lo, lo + span]);
         }}>
           <text x={PAD} y={11} fill={C.dim} fontSize={9} fontFamily="IBM Plex Mono, monospace">
-            FULL TRANSCRIPT (SCHEMATIC) · {TRANSCRIPT_LENGTH.toLocaleString()} nt · INTRONS COMPRESSED
+            {simple ? 'WHOLE GENE MESSAGE · BOX = ZOOMED VIEW BELOW' : `FULL TRANSCRIPT (SCHEMATIC) · ${TRANSCRIPT_LENGTH.toLocaleString()} nt · INTRONS COMPRESSED`}
           </text>
           <line x1={PAD} x2={PAD + innerW} y1={30} y2={30} stroke={C.line} />
           {TRANSCRIPT.map((r) => {
@@ -190,9 +200,9 @@ export function DesignCanvas({
             return (
               <g key={f}>
                 <line x1={fx(p)} x2={fx(p)} y1={14} y2={FOCUS_H - 10} stroke={C.line2} strokeDasharray="1 3" />
-                <text x={fx(p)} y={11} fill={C.dim} fontSize={8.5} fontFamily="IBM Plex Mono, monospace" textAnchor={f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}>
+                {!simple && <text x={fx(p)} y={11} fill={C.dim} fontSize={8.5} fontFamily="IBM Plex Mono, monospace" textAnchor={f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}>
                   {p.toLocaleString()}
-                </text>
+                </text>}
               </g>
             );
           })}
@@ -238,14 +248,14 @@ export function DesignCanvas({
               <line x1={fx(variantNt)} x2={fx(variantNt)} y1={trackY - 12} y2={trackY + trackH + 6} stroke={C.lof} strokeWidth={1.2} />
               <path d={`M${fx(variantNt) - 4},${trackY - 12} L${fx(variantNt) + 4},${trackY - 12} L${fx(variantNt)},${trackY - 5} Z`} fill={C.lof} />
               <text x={fx(variantNt) + 6} y={trackY - 13} fill={C.lof} fontSize={9} fontFamily="IBM Plex Mono, monospace">
-                {variant.hgvsP} · {variantExon.label.replace(' (approximate)', '')}
+                {simple ? "PATIENT'S CHANGE" : `${variant.hgvsP} · ${variantExon.label.replace(' (approximate)', '')}`}
               </text>
             </g>
           )}
 
           {/* candidate binding overlays */}
           <text x={PAD} y={barTop - 4} fill={C.dim} fontSize={8.5} fontFamily="IBM Plex Mono, monospace">
-            CANDIDATE BINDING WINDOWS (SCHEMATIC · NO SEQUENCE)
+            {simple ? 'DRUG DESIGNS · WHERE EACH WOULD STICK' : 'CANDIDATE BINDING WINDOWS (SCHEMATIC · NO SEQUENCE)'}
           </text>
           {windowCandidates.map((c, i) => {
             const y = barTop + (i % 5) * 9;
@@ -265,13 +275,16 @@ export function DesignCanvas({
           })}
           {windowCandidates.length === 0 && (
             <text x={PAD} y={barTop + 12} fill={C.dim} fontSize={9} fontFamily="IBM Plex Mono, monospace">
-              {targetRegionId ? 'NO CANDIDATE WINDOWS IN VIEW' : 'SELECT A TARGET REGION TO GENERATE CANDIDATES'}
+              {targetRegionId ? 'NO CANDIDATE WINDOWS IN VIEW' : simple ? 'CLICK A DASHED BOX ABOVE TO DESIGN DRUGS FOR IT' : 'SELECT A TARGET REGION TO GENERATE CANDIDATES'}
             </text>
           )}
         </svg>
       </div>
 
+      {simple && <SimpleLegend />}
+
       {/* schematic secondary structure */}
+      {!simple && (
       <div className="flex-1 min-h-0 overflow-y-auto scroll-thin">
         <div className="flex items-center justify-between h-7 px-3 border-b border-line2">
           <Label>Secondary structure · schematic (not a folding prediction)</Label>
@@ -286,6 +299,28 @@ export function DesignCanvas({
         )}
         <Legend targetable={targetableIds.length} />
       </div>
+      )}
+    </div>
+  );
+}
+
+function SimpleLegend() {
+  const items: { label: string; color: string; dashed?: boolean }[] = [
+    { label: "Patient's genetic change", color: C.lof },
+    { label: 'Where a drug could act (click)', color: C.cyan, dashed: true },
+    { label: 'Picked design', color: C.gof },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-2">
+      {items.map((it) => (
+        <span key={it.label} className="inline-flex items-center gap-2 text-[12px] text-mute">
+          <svg width="16" height="6">
+            <line x1="0" y1="3" x2="16" y2="3" stroke={it.color} strokeWidth="2.5" strokeDasharray={it.dashed ? '3 2' : undefined} />
+          </svg>
+          {it.label}
+        </span>
+      ))}
+      <span className="text-[11px] text-dim">Schematic drawing, not real sequence.</span>
     </div>
   );
 }

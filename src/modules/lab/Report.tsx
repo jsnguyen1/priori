@@ -81,8 +81,8 @@ export function MeasurementTable({ variantId, characterized, color }: { variantI
                   )}
                 </td>
                 <td className="text-right px-1 py-1.5 font-mono tabular-nums text-mute">{fmt.num(m.reference, meta.digits)}</td>
-                <td className="text-right px-1 py-1.5 font-mono tabular-nums text-ink whitespace-nowrap">{characterized ? deltaText(k, m.value, m.reference) : '—'}</td>
-                <td className="text-right pl-1 pr-3 py-1.5 font-mono tabular-nums text-mute">{characterized ? m.n : '—'}</td>
+                <td className="text-right px-1 py-1.5 font-mono tabular-nums text-ink whitespace-nowrap">{characterized ? deltaText(k, m.value, m.reference) : 'n/a'}</td>
+                <td className="text-right pl-1 pr-3 py-1.5 font-mono tabular-nums text-mute">{characterized ? m.n : 'n/a'}</td>
               </tr>
             );
           })}

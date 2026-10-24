@@ -74,7 +74,7 @@ export function CompareView({ candidates, selectedCandidateId, onSelect }: { can
     },
     {
       label: 'Binding window (nt)',
-      cell: (c) => <span className="font-mono text-[11px] text-mute tabular-nums">{c.bindEnd > 0 ? `${c.bindStart.toLocaleString()}–${c.bindEnd.toLocaleString()}` : '— protein-level'}</span>,
+      cell: (c) => <span className="font-mono text-[11px] text-mute tabular-nums">{c.bindEnd > 0 ? `${c.bindStart.toLocaleString()}–${c.bindEnd.toLocaleString()}` : 'protein-level'}</span>,
     },
     {
       label: 'Development requirements',
@@ -126,7 +126,7 @@ export function CompareView({ candidates, selectedCandidateId, onSelect }: { can
         </table>
         <div className="px-3 py-2 text-[10px] leading-[14px] text-dim border-t border-line2">
           ILLUSTRATIVE comparison of fictional designs. Intervals are model intervals on a shared scale, not confidence
-          intervals on measured data. Higher scores do not imply activity — the simulated screen is the next step.
+          intervals on measured data. Higher scores do not imply activity, the simulated screen is the next step.
         </div>
       </div>
     </div>

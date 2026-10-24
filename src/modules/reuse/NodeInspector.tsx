@@ -3,10 +3,44 @@ import type { EvidenceArtifact, NodeReuseAssessment, ReuseAssessment } from '../
 import { EvidenceBadge, KV, Label, ReuseTag, SectionHeader } from '../../ui/primitives';
 import { C, REUSE_STYLE } from '../../ui/tokens';
 import { conditionLabel, NODE_LABELS, tallyClasses } from '../../sim/reuse';
-import { REUSE_ORDER, SOURCE_LABEL, VALIDATION_LABEL } from './shared';
+import { PLAIN_CLASS, PLAIN_NODE, REUSE_ORDER, SOURCE_LABEL, VALIDATION_LABEL, plainWhy } from './shared';
+import { useSimple } from '../../ui/simple';
 import { ReuseLegend } from './ReuseGraph';
 
-export function NodeInspector({ node, library, assessment }: { node: NodeReuseAssessment | null; library: EvidenceArtifact[]; assessment: ReuseAssessment | null }) {
+/** Simple view: one plain sentence + at most two pieces of required work. */
+function SimpleNodeCard({ node, onClose }: { node: NodeReuseAssessment; onClose?: () => void }) {
+  const s = REUSE_STYLE[node.reuseClass];
+  const work = node.requiredWork.filter((w) => w !== 'n/a').slice(0, 2);
+  return (
+    <div className="p-5 space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[18px] leading-[24px] text-ink font-medium">{PLAIN_NODE[node.nodeId]}</div>
+          <div className="mt-1.5 inline-flex items-center gap-2 text-[13px]" style={{ color: s.color }}>
+            <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash} /></svg>
+            {PLAIN_CLASS[node.reuseClass].label}
+          </div>
+        </div>
+        {onClose && <button onClick={onClose} className="text-mute hover:text-ink text-[18px] leading-none px-1" aria-label="Close">×</button>}
+      </div>
+      <p className="border-l-2 pl-3 text-[14px] leading-[21px] text-ink" style={{ borderColor: s.color }}>{plainWhy(node)}</p>
+      {work.length > 0 && (
+        <div>
+          <div className="text-[12px] text-mute mb-2">Still to do for this child</div>
+          <ul className="space-y-2">
+            {work.map((w, i) => (
+              <li key={i} className="flex gap-2 text-[13px] leading-[19px] text-ink"><span className="text-dim">•</span>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function NodeInspector({ node, library, assessment, onClose }: { node: NodeReuseAssessment | null; library: EvidenceArtifact[]; assessment: ReuseAssessment | null; onClose?: () => void }) {
+  const simple = useSimple();
+  if (simple) return node ? <SimpleNodeCard node={node} onClose={onClose} /> : null;
   if (!assessment) {
     return (
       <div>
@@ -55,7 +89,7 @@ export function NodeInspector({ node, library, assessment }: { node: NodeReuseAs
 
         <div>
           <Label className="mb-1.5">Condition checks {node.checks.length > 0 && <span className="text-dim normal-case tracking-normal">· determining artifact</span>}</Label>
-          {node.checks.length === 0 && <div className="text-xs text-dim">No applicable artifact — no conditions to evaluate.</div>}
+          {node.checks.length === 0 && <div className="text-xs text-dim">No applicable artifact, no conditions to evaluate.</div>}
           {node.checks.map((c, i) => (
             <div key={i} className="flex gap-2 py-1 border-b border-line2 last:border-0">
               <span className="font-mono text-xs w-3 shrink-0" style={{ color: c.satisfied ? C.cyan : C.warn }}>{c.satisfied ? '✓' : '✗'}</span>
@@ -87,12 +121,12 @@ export function NodeInspector({ node, library, assessment }: { node: NodeReuseAs
               </div>
               <div className="text-xs text-ink mb-1">{a.title}</div>
               <KV k="Source type" v={SOURCE_LABEL[a.provenance.sourceType]} />
-              <KV k="Originating patient" v={a.provenance.originatingPatientId ?? '— (platform)'} />
+              <KV k="Originating patient" v={a.provenance.originatingPatientId ?? 'platform'} />
               <KV k="Gene" v={a.provenance.gene} />
-              <KV k="Mechanism" v={a.provenance.mechanism ?? '—'} />
+              <KV k="Mechanism" v={a.provenance.mechanism ?? 'n/a'} />
               {a.provenance.variantId && <KV k="Variant" v={a.provenance.variantId} />}
-              {a.provenance.domain && <KV k="Domain / region" v={`${a.provenance.domain} · ${a.provenance.regionKind ?? '—'}`} />}
-              <KV k="Protocol version" v={a.provenance.protocolVersion ?? '—'} />
+              {a.provenance.domain && <KV k="Domain / region" v={`${a.provenance.domain} · ${a.provenance.regionKind ?? 'n/a'}`} />}
+              <KV k="Protocol version" v={a.provenance.protocolVersion ?? 'n/a'} />
               {a.provenance.modality && <KV k="Modality" v={a.provenance.modality} />}
               <KV k="Validation" v={VALIDATION_LABEL[a.provenance.validationStatus]} />
               <div className="mt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-dim">Reuse conditions</div>

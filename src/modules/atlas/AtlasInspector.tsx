@@ -10,14 +10,18 @@ import { Button, EvidenceBadge, KV, Label, MechanismTag, SectionHeader, Term, fm
 import { C, MECH_COLOR } from '../../ui/tokens';
 import { type AtlasIndex, EVIDENCE_LABEL, shortId } from './atlasData';
 import type { CharacterizationStatus } from './evidenceStatus';
-import { RegionalPrior } from './RegionalPrior';
+import { RegionalPrior, StackBar, regionalPrior } from './RegionalPrior';
+import { useSimple } from '../../ui/simple';
+import { SCN2A_LENGTH } from '../../data/published';
+import { MECHS } from './atlasData';
+import { PLAIN_MECH, PLAIN_MECH_SUB, plainSwap, plainWhere } from './plain';
 
 const DOMAIN_LABEL: Record<string, string> = { DI: 'Repeat DI', DII: 'Repeat DII', DIII: 'Repeat DIII', DIV: 'Repeat DIV', linker: 'Inter-domain linker', termini: 'Terminus' };
 
 const INDET_REASON: Record<string, string> = {
   'no-significant-deviation': 'No measurement deviates meaningfully from reference.',
   'low-confidence': 'Effects lie near decision boundaries relative to measurement uncertainty; perturbation draws do not reproduce a directional call.',
-  'insufficient-data': 'No direct measurement — regional computational prior only.',
+  'insufficient-data': 'No direct measurement, regional computational prior only.',
 };
 
 const DIRECTIONS: Record<MechanismClass, { title: React.ReactNode; detail: string }[]> = {
@@ -52,6 +56,7 @@ export function AtlasInspector({ index, i, status, onHighlight }: { index: Atlas
   const selectVariant = useStore((s) => s.selectVariant);
   const selectedVariantId = useStore((s) => s.selectedVariantId);
   const setModule = useStore((s) => s.setModule);
+  const simple = useSimple();
   if (i < 0) return null;
   const v = index.variants[i];
   const region = regionById(v.regionId);
@@ -64,6 +69,8 @@ export function AtlasInspector({ index, i, status, onHighlight }: { index: Atlas
     if (selectedVariantId !== v.id) selectVariant(v.id, { silent: true });
     setModule('lab');
   };
+
+  if (simple) return <SimpleInspector index={index} i={i} status={status} known={known} onHighlight={onHighlight} onInspect={inspect} />;
 
   return (
     <div data-tour="atlas.inspector" className="flex flex-col min-h-full">
@@ -148,7 +155,7 @@ export function AtlasInspector({ index, i, status, onHighlight }: { index: Atlas
                         <span className="text-dim"> ± {fmt.num(m.se, meta.digits === 0 ? 0 : Math.max(1, meta.digits))}</span>
                       </td>
                       <td className="py-1 text-right text-dim whitespace-nowrap">{fmt.num(m.reference, meta.digits)}</td>
-                      <td className="py-1 text-right text-dim">{prior ? '—' : m.n}</td>
+                      <td className="py-1 text-right text-dim">{prior ? 'n/a' : m.n}</td>
                     </tr>
                   );
                 })}
@@ -210,7 +217,7 @@ export function AtlasInspector({ index, i, status, onHighlight }: { index: Atlas
           <ul className="px-3 py-2 space-y-1">
             {c.limitations.map((l) => (
               <li key={l} className="flex gap-2 text-2xs text-mute leading-[15px]">
-                <span className="text-dim">—</span>
+                <span className="text-dim">n/a</span>
                 {l}
               </li>
             ))}
@@ -232,6 +239,124 @@ export function AtlasInspector({ index, i, status, onHighlight }: { index: Atlas
       <div className="flex-1" />
       <div className="sticky bottom-0 p-3 border-t border-line2 bg-bg">
         <Button data-tour="atlas.inspect" variant="primary" size="lg" className="w-full" onClick={inspect}>
+          INSPECT MOLECULAR MECHANISM <ArrowRight size={14} strokeWidth={1.5} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const Cap = ({ children }: { children: React.ReactNode }) => <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-1.5">{children}</div>;
+
+/** Simple view: one short card — what, where, what it does, what its neighbours do. */
+function SimpleInspector({
+  index,
+  i,
+  status,
+  known,
+  onHighlight,
+  onInspect,
+}: {
+  index: AtlasIndex;
+  i: number;
+  status: CharacterizationStatus;
+  known: boolean;
+  onHighlight: (q: string) => void;
+  onInspect: () => void;
+}) {
+  const v = index.variants[i];
+  const region = regionById(v.regionId);
+  const where = plainWhere(region);
+  const mech = known ? getClassification(v.id).mechanism : null;
+  const patient = v.patientIds[0];
+  const pr = regionalPrior(index, i);
+  const plainCounts = MECHS.map((m, k) => ({ m, n: pr.cm[k] })).filter((c) => c.n > 0);
+  const agrees = mech && pr.lean && patient ? mech === pr.lean : null;
+  const posPct = ((v.position - 0.5) / SCN2A_LENGTH) * 100;
+
+  return (
+    <div data-tour="atlas.inspector" className="flex flex-col min-h-full">
+      <SectionHeader title="Selected change" right={<EvidenceBadge category="simulated" />} />
+      <div className="px-4 pt-4 pb-3">
+        {patient && <div className="font-mono text-[11px] tracking-[0.1em] text-cyan mb-1">OUR PATIENT · {patient}</div>}
+        <div className="text-[18px] leading-[24px] text-ink">{patient ? `${patient}’s change` : `Change at position ${v.position.toLocaleString('en-US')}`}</div>
+        <div className="mt-1 text-[13px] leading-[19px] text-mute">
+          One building block swapped: {plainSwap(v.hgvsP)}
+        </div>
+      </div>
+
+      <div className="px-4 py-3 border-t border-line2">
+        <Cap>Where</Cap>
+        <div className="text-[15px] leading-[21px] text-ink">
+          {where.short}
+          {where.detail && <span className="text-mute">, {where.detail}</span>}
+        </div>
+        <div className="relative mt-2.5 h-[14px]" title={`Position ${v.position} of ${SCN2A_LENGTH}`}>
+          <div className="absolute left-0 right-0 top-[6px] h-[2px] bg-line rounded-full" />
+          <div className="absolute top-0 w-[2px] h-[14px] bg-ink" style={{ left: `calc(${posPct}% - 1px)` }} />
+        </div>
+        <div className="flex justify-between font-mono text-[10px] text-dim mt-0.5">
+          <span>start</span>
+          <span className="text-mute tabular-nums">{v.position.toLocaleString('en-US')} of {SCN2A_LENGTH.toLocaleString('en-US')}</span>
+          <span>end</span>
+        </div>
+      </div>
+
+      <div className="px-4 py-3 border-t border-line2">
+        <Cap>What it does to the channel</Cap>
+        {mech ? (
+          <div className="flex items-baseline gap-2">
+            <span className="inline-block w-[10px] h-[10px] rounded-full self-center" style={{ background: MECH_COLOR[mech] }} />
+            <span className="text-[22px] leading-[28px]" style={{ color: MECH_COLOR[mech] }}>
+              {PLAIN_MECH[mech]}
+            </span>
+            <span className="text-[13px] text-dim">({PLAIN_MECH_SUB[mech]})</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2">
+              <span className="inline-block w-[10px] h-[10px] rounded-full self-center border border-dashed border-ink" />
+              <span className="text-[22px] leading-[28px] text-ink">{status === 'running' ? 'Being measured…' : 'Not measured yet'}</span>
+            </div>
+            <div className="mt-1 text-[13px] text-mute">Testing it in the lab is the only way to know.</div>
+          </>
+        )}
+      </div>
+
+      <div className="px-4 py-3 border-t border-line2">
+        <Cap>What nearby changes do</Cap>
+        {pr.measured.length > 0 ? (
+          <>
+            <StackBar counts={pr.cm} h={10} />
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] tabular-nums">
+              {plainCounts.map(({ m, n }) => (
+                <span key={m} style={{ color: MECH_COLOR[m] }}>
+                  {n} {PLAIN_MECH[m].toLowerCase()}
+                </span>
+              ))}
+            </div>
+            <div className="mt-2 text-[13px] leading-[19px] text-mute">
+              {pr.lean ? (
+                <>
+                  Most clear-cut neighbours are <span style={{ color: MECH_COLOR[pr.lean] }}>{PLAIN_MECH[pr.lean].toLowerCase()}</span> ({fmt.pct(pr.leanFrac)} of {pr.directional}).{' '}
+                  {agrees === true ? 'Its own test agrees.' : agrees === false ? 'Its own test disagrees.' : 'A hint, not proof.'}
+                </>
+              ) : (
+                <>Neighbours don’t point one way.</>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="text-[13px] text-mute">No measured neighbours here yet.</div>
+        )}
+        <button onClick={() => onHighlight(pr.region.label)} className="mt-2 text-[12px] text-mute hover:text-ink underline decoration-dotted underline-offset-2">
+          Show them on the map
+        </button>
+      </div>
+
+      <div className="flex-1" />
+      <div className="sticky bottom-0 p-3 border-t border-line2 bg-bg">
+        <Button data-tour="atlas.inspect" variant="primary" size="lg" className="w-full" onClick={onInspect}>
           INSPECT MOLECULAR MECHANISM <ArrowRight size={14} strokeWidth={1.5} />
         </Button>
       </div>

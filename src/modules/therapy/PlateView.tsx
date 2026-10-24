@@ -3,6 +3,7 @@ import type { ScreeningResult, ScreeningRun, Well } from '../../domain/types';
 import { DOSE_SERIES, MEASUREMENT_UNIT, PLATE_COLS, REPLICATES, ROW_LETTERS, SCREEN_THRESHOLDS } from '../../sim/screening';
 import { Label, cx } from '../../ui/primitives';
 import { C } from '../../ui/tokens';
+import { useSimple } from '../../ui/simple';
 import { OUTCOME_COLOR, OutcomeBadge, ramp } from './shared';
 
 const CELL = 26;
@@ -27,6 +28,8 @@ export function PlateView({
   selectedWellId: string | null;
   onSelectWell: (id: string | null) => void;
 }) {
+  const simple = useSimple();
+  const cell = simple ? 34 : CELL;
   const unit = MEASUREMENT_UNIT[run.results[0]?.measurementKey ?? 'peakDensity'] ?? '';
   const ref = run.results[0]?.referenceMean ?? 0;
   const untr = run.results[0]?.untreatedMean ?? 0;
@@ -34,39 +37,45 @@ export function PlateView({
 
   const rowCandidate = (row: number) => run.plate.find((wl) => wl.row === row && wl.kind === 'candidate')?.candidateId;
 
-  const width = LEFT + PLATE_COLS * (CELL + GAP) + 16;
-  const height = TOP + ROW_LETTERS.length * (CELL + GAP) + 28;
+  const width = LEFT + PLATE_COLS * (cell + GAP) + 16;
+  const height = TOP + ROW_LETTERS.length * (cell + GAP) + 28;
 
   return (
     <div className="flex flex-col min-h-0">
-      <div className="flex items-center justify-between h-7 px-3 border-b border-line2 shrink-0">
-        <Label>96-well plate · simulated · {run.id}</Label>
-        <span className="font-mono text-[10px] text-dim">
-          response = {run.results[0]?.measurementKey === 'persistentPct' ? 'persistent current' : 'peak current density'} ({unit})
-        </span>
-      </div>
-      <div className="overflow-auto scroll-thin" data-tour="therapy.plate">
+      {simple ? (
+        <div className="flex items-center justify-between h-9 px-3 border-b border-line2 shrink-0">
+          <span className="text-[13px] text-ink">Test plate <span className="text-mute">· each square is a dish of patient-like cells · click one</span></span>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between h-7 px-3 border-b border-line2 shrink-0">
+          <Label>96-well plate · simulated · {run.id}</Label>
+          <span className="font-mono text-[10px] text-dim">
+            response = {run.results[0]?.measurementKey === 'persistentPct' ? 'persistent current' : 'peak current density'} ({unit})
+          </span>
+        </div>
+      )}
+      <div className={cx('overflow-auto scroll-thin', simple && 'px-3 pt-2')} data-tour="therapy.plate">
         <svg width={width} height={height} className="block">
           {/* column headers + dose groups */}
           {Array.from({ length: PLATE_COLS }, (_, c) => (
-            <text key={c} x={LEFT + c * (CELL + GAP) + CELL / 2} y={26} fill={C.dim} fontSize={9} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
+            <text key={c} x={LEFT + c * (cell + GAP) + cell / 2} y={26} fill={C.dim} fontSize={9} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
               {String(c + 1).padStart(2, '0')}
             </text>
           ))}
           {DOSE_SERIES.map((d, i) => {
-            const x0 = LEFT + i * REPLICATES * (CELL + GAP);
-            const wid = REPLICATES * (CELL + GAP) - GAP;
+            const x0 = LEFT + i * REPLICATES * (cell + GAP);
+            const wid = REPLICATES * (cell + GAP) - GAP;
             return (
               <g key={d}>
                 <line x1={x0} x2={x0 + wid} y1={12} y2={12} stroke={C.line} />
                 <text x={x0 + wid / 2} y={9} fill={C.mute} fontSize={8.5} fontFamily="IBM Plex Mono, monospace" textAnchor="middle">
-                  {d} nM
+                  {simple ? `dose ${i + 1}` : `${d} nM`}
                 </text>
               </g>
             );
           })}
           <text x={LEFT - 6} y={9} fill={C.dim} fontSize={8} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
-            DOSE →
+            {simple ? 'MORE DRUG →' : 'DOSE →'}
           </text>
 
           {/* rows */}
@@ -74,9 +83,9 @@ export function PlateView({
             const cid = rowCandidate(row);
             return (
               <g key={letter}>
-                <text x={LEFT - 8} y={TOP + row * (CELL + GAP) + CELL / 2 + 3.5} fill={C.mute} fontSize={9} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
+                <text x={LEFT - 8} y={TOP + row * (cell + GAP) + cell / 2 + 3.5} fill={C.mute} fontSize={9} fontFamily="IBM Plex Mono, monospace" textAnchor="end">
                   {letter}
-                  {cid ? ` ${cid.replace('PRI-', '')}` : row === 0 ? ' CTRL' : ''}
+                  {cid ? ` ${cid.replace('PRI-', '')}` : row === 0 ? (simple ? ' CONTROLS' : ' CTRL') : ''}
                 </text>
               </g>
             );
@@ -84,8 +93,8 @@ export function PlateView({
 
           {/* wells */}
           {run.plate.map((wl) => {
-            const x = LEFT + wl.col * (CELL + GAP);
-            const y = TOP + wl.row * (CELL + GAP);
+            const x = LEFT + wl.col * (cell + GAP);
+            const y = TOP + wl.row * (cell + GAP);
             const selected = wl.id === selectedWellId;
             let fill: string = '#0C141B';
             let stroke: string = C.line2;
@@ -110,35 +119,58 @@ export function PlateView({
                 <rect
                   x={x}
                   y={y}
-                  width={CELL}
-                  height={CELL}
+                  width={cell}
+                  height={cell}
                   rx={2}
                   fill={wl.kind === 'empty' ? 'none' : fill}
                   stroke={selected ? C.cyan : stroke}
                   strokeWidth={selected ? 1.6 : 0.8}
                   strokeDasharray={selected ? undefined : wl.kind === 'empty' ? '1 3' : dash}
                 />
-                {wl.kind === 'reference' && <circle cx={x + CELL / 2} cy={y + CELL / 2} r={2.2} fill={C.ink} />}
-                {wl.kind === 'untreated-variant' && <line x1={x + 7} x2={x + CELL - 7} y1={y + CELL / 2} y2={y + CELL / 2} stroke={C.warn} strokeWidth={1.2} />}
+                {wl.kind === 'reference' && <circle cx={x + cell / 2} cy={y + cell / 2} r={2.2} fill={C.ink} />}
+                {wl.kind === 'untreated-variant' && <line x1={x + 7} x2={x + cell - 7} y1={y + cell / 2} y2={y + cell / 2} stroke={C.warn} strokeWidth={1.2} />}
                 {wl.kind === 'vehicle' && (
                   <>
-                    <line x1={x + 7} x2={x + CELL - 7} y1={y + 7} y2={y + CELL - 7} stroke={C.mute} strokeWidth={0.8} />
-                    <line x1={x + CELL - 7} x2={x + 7} y1={y + 7} y2={y + CELL - 7} stroke={C.mute} strokeWidth={0.8} />
+                    <line x1={x + 7} x2={x + cell - 7} y1={y + 7} y2={y + cell - 7} stroke={C.mute} strokeWidth={0.8} />
+                    <line x1={x + cell - 7} x2={x + 7} y1={y + 7} y2={y + cell - 7} stroke={C.mute} strokeWidth={0.8} />
                   </>
                 )}
-                {selected && <rect x={x - 2.5} y={y - 2.5} width={CELL + 5} height={CELL + 5} rx={3} fill="none" stroke={C.cyan} strokeWidth={0.6} strokeOpacity={0.6} />}
+                {selected && <rect x={x - 2.5} y={y - 2.5} width={cell + 5} height={cell + 5} rx={3} fill="none" stroke={C.cyan} strokeWidth={0.6} strokeOpacity={0.6} />}
               </g>
             );
           })}
 
           {/* dose group separators */}
           {[1, 2, 3].map((i) => {
-            const x = LEFT + i * REPLICATES * (CELL + GAP) - GAP / 2;
-            return <line key={i} x1={x} x2={x} y1={TOP - 4} y2={TOP + ROW_LETTERS.length * (CELL + GAP) - GAP + 4} stroke={C.line2} />;
+            const x = LEFT + i * REPLICATES * (cell + GAP) - GAP / 2;
+            return <line key={i} x1={x} x2={x} y1={TOP - 4} y2={TOP + ROW_LETTERS.length * (cell + GAP) - GAP + 4} stroke={C.line2} />;
           })}
         </svg>
       </div>
-      <PlateLegend unit={unit} ref0={untr} ref1={ref} />
+      {simple ? <SimplePlateLegend /> : <PlateLegend unit={unit} ref0={untr} ref1={ref} />}
+    </div>
+  );
+}
+
+function SimplePlateLegend() {
+  const sw = (fill: string, stroke: string, dash?: string) => (
+    <svg width="14" height="14"><rect x={0.5} y={0.5} width={13} height={13} rx={2} fill={fill} stroke={stroke} strokeWidth={0.8} strokeDasharray={dash} /></svg>
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-3 py-2.5 text-[12px] text-mute">
+      <span className="inline-flex items-center gap-1.5">{sw('rgba(231,238,244,0.16)', C.ink)}Normal cells</span>
+      <span className="inline-flex items-center gap-1.5">{sw('rgba(215,111,114,0.14)', C.warn, '3 2')}Patient cells, no drug</span>
+      <span className="inline-flex items-center gap-1.5">{sw('rgba(138,156,169,0.12)', C.mute, '1 2')}Blank treatment</span>
+      <span className="inline-flex items-center gap-1.5">
+        Patient cells + drug:
+        <span className="text-dim">no change</span>
+        <svg width="70" height="10">
+          {Array.from({ length: 35 }, (_, i) => (
+            <rect key={i} x={i * 2} y={0} width={2} height={10} fill={ramp(i / 34)} />
+          ))}
+        </svg>
+        <span className="text-cyan">back to normal</span>
+      </span>
     </div>
   );
 }

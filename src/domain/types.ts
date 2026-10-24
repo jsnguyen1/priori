@@ -155,7 +155,7 @@ export interface GeneticVariant {
   position: number; // protein residue (Q99250)
   refAA: string; // from published reference sequence
   altAA: string; // hypothetical substitution
-  hgvsP: string; // e.g. 'p.(Ser1714Pro)' — hypothetical
+  hgvsP: string; // e.g. 'p.(Ser1714Pro)', hypothetical
   regionId: string;
   /** Ground-truth parameters of the synthetic model (hidden from the "clinic" view). */
   params: ChannelParams;

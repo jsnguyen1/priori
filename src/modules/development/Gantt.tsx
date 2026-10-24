@@ -5,7 +5,34 @@ import type { DevelopmentPlan, ScheduledTask } from '../../domain/types';
 import { C, MOTION, REUSE_STYLE } from '../../ui/tokens';
 import { useReducedMotion, useWidth } from '../reuse/shared';
 
-const LABEL_W = 210;
+/** Plain-English task names for Simple view. */
+export const PLAIN_TASK_NAME: Record<string, string> = {
+  T01: 'Build the lab test',
+  T02: 'Set up reference cells',
+  T03: 'Measure the mutation',
+  T04: 'Work out what’s broken',
+  T05: 'Design drug candidates',
+  T06: 'Test candidates in cells',
+  T07: 'Design manufacturing',
+  T08: 'Make this patient’s drug',
+  T09: 'Quality-control tests',
+  T10: 'Plan safety studies',
+  T11: 'Safety studies (this drug)',
+  T12: 'Regulatory: shared parts',
+  T13: 'Regulatory: patient parts',
+  T14: 'Treat & monitor patient',
+};
+
+/** Plain labels for the four reuse classes. */
+export const PLAIN_REUSE: Record<keyof typeof REUSE_STYLE, string> = {
+  reusable: 'Reused',
+  'reuse-with-validation': 'Reused after a check',
+  'new-work': 'Done new',
+  'not-transferable': 'Can’t transfer',
+};
+
+const LABEL_W_DETAIL = 210;
+const LABEL_W_SIMPLE = 196;
 const ROW_H = 15;
 const HEAD_H = 24;
 const GAP = 14;
@@ -16,11 +43,14 @@ export function DualGantt({
   plans,
   selectedTaskId,
   onSelect,
+  simple = false,
 }: {
   plans: { title: string; sub: string; plan: DevelopmentPlan; ghost: boolean }[];
   selectedTaskId: string | null;
   onSelect: (id: string | null) => void;
+  simple?: boolean;
 }) {
+  const LABEL_W = simple ? LABEL_W_SIMPLE : LABEL_W_DETAIL;
   const { ref, w } = useWidth<HTMLDivElement>(900);
   const reduced = useReducedMotion();
   const [hover, setHover] = useState<string | null>(null);
@@ -49,11 +79,22 @@ export function DualGantt({
           const focusTask = focus ? p.plan.tasks.find((t) => t.task.id === focus) : null;
           return (
             <g key={p.title}>
-              <text x={0} y={y0 + 14} className="font-mono" fontSize={10} letterSpacing="0.1em" fill={C.ink}>{p.title}</text>
-              <text x={LABEL_W} y={y0 + 14} className="font-mono" fontSize={9.5} fill={C.mute}>{p.sub}</text>
-              <text x={W} y={y0 + 14} textAnchor="end" className="font-mono" fontSize={9.5} fill={C.ink}>
-                {p.plan.timelineWeeks.mid.toFixed(0)} wk
-              </text>
+              {simple ? (
+                <>
+                  <text x={0} y={y0 + 15} fontSize={13} fontWeight={500} fill={p.ghost ? C.cyan : C.ink}>{p.title}</text>
+                  <text x={W} y={y0 + 15} textAnchor="end" className="font-mono" fontSize={12} fill={p.ghost ? C.cyan : C.ink}>
+                    {p.plan.timelineWeeks.mid.toFixed(0)} weeks
+                  </text>
+                </>
+              ) : (
+                <>
+                  <text x={0} y={y0 + 14} className="font-mono" fontSize={10} letterSpacing="0.1em" fill={C.ink}>{p.title}</text>
+                  <text x={LABEL_W} y={y0 + 14} className="font-mono" fontSize={9.5} fill={C.mute}>{p.sub}</text>
+                  <text x={W} y={y0 + 14} textAnchor="end" className="font-mono" fontSize={9.5} fill={C.ink}>
+                    {p.plan.timelineWeeks.mid.toFixed(0)} wk
+                  </text>
+                </>
+              )}
               <line x1={0} x2={W} y1={y0 + HEAD_H - 3} y2={y0 + HEAD_H - 3} stroke={C.line} />
               {p.plan.tasks.map((t, i) => (
                 <Row
@@ -62,6 +103,8 @@ export function DualGantt({
                   y={rowY(i)}
                   x={x}
                   W={W}
+                  simple={simple}
+                  labelW={LABEL_W}
                   ghost={p.ghost}
                   selected={selectedTaskId === t.task.id}
                   hovered={focus === t.task.id}
@@ -99,7 +142,7 @@ export function DualGantt({
               <text x={x(t)} y={15} textAnchor="middle" className="font-mono" fontSize={9} fill={C.dim}>{t}</text>
             </g>
           ))}
-          <text x={LABEL_W + plotW + 6} y={15} className="font-mono" fontSize={9} fill={C.dim}>weeks</text>
+          <text x={simple ? LABEL_W + plotW + 22 : LABEL_W + plotW + 6} y={15} className="font-mono" fontSize={9} fill={C.dim}>weeks</text>
         </g>
       </svg>
     </div>
@@ -107,9 +150,9 @@ export function DualGantt({
 }
 
 function Row({
-  t, y, x, W, ghost, selected, hovered, delay, reduced, onHover, onClick,
+  t, y, x, W, simple, labelW: LABEL_W, ghost, selected, hovered, delay, reduced, onHover, onClick,
 }: {
-  t: ScheduledTask; y: number; x: (w: number) => number; W: number; ghost: boolean; selected: boolean; hovered: boolean; delay: number; reduced: boolean;
+  t: ScheduledTask; y: number; x: (w: number) => number; W: number; simple: boolean; labelW: number; ghost: boolean; selected: boolean; hovered: boolean; delay: number; reduced: boolean;
   onHover: (id: string | null) => void; onClick: () => void;
 }) {
   const s = REUSE_STYLE[t.reuseClass];
@@ -120,10 +163,16 @@ function Row({
   return (
     <g className="cursor-pointer" onMouseEnter={() => onHover(t.task.id)} onClick={onClick}>
       <rect x={0} y={y} width={W} height={ROW_H} fill={selected ? C.surface2 : hovered ? C.surface : 'transparent'} />
-      <text x={0} y={y + 11} className="font-mono" fontSize={9} fill={C.dim}>{t.task.id}</text>
-      <text x={26} y={y + 11} fontSize={10.5} fill={selected ? C.ink : C.mute}>{t.task.name}</text>
-      {t.task.mandatory && <text x={LABEL_W - 26} y={y + 11} textAnchor="end" className="font-mono" fontSize={8} fill={C.warn}>REQ</text>}
-      {t.onCriticalPath && <text x={LABEL_W - 6} y={y + 11} textAnchor="end" className="font-mono" fontSize={8} fill={C.ink}>CP</text>}
+      {simple ? (
+        <text x={0} y={y + 11.5} fontSize={11.5} fill={selected ? C.ink : C.mute}>{PLAIN_TASK_NAME[t.task.id] ?? t.task.name}</text>
+      ) : (
+        <>
+          <text x={0} y={y + 11} className="font-mono" fontSize={9} fill={C.dim}>{t.task.id}</text>
+          <text x={26} y={y + 11} fontSize={10.5} fill={selected ? C.ink : C.mute}>{t.task.name}</text>
+          {t.task.mandatory && <text x={LABEL_W - 26} y={y + 11} textAnchor="end" className="font-mono" fontSize={8} fill={C.warn}>REQ</text>}
+          {t.onCriticalPath && <text x={LABEL_W - 6} y={y + 11} textAnchor="end" className="font-mono" fontSize={8} fill={C.ink}>CP</text>}
+        </>
+      )}
       {ghost && gw > bw + 0.5 && (
         <rect x={bx} y={y + 2.5} width={gw} height={h} rx={1} fill="none" stroke={C.dim} strokeOpacity={0.6} strokeDasharray="1 2" />
       )}
@@ -158,6 +207,21 @@ export function GanttLegend() {
       <span className="inline-flex items-center gap-1.5"><svg width="18" height="9"><rect x="0.5" y="0.5" width="17" height="8" fill="none" stroke={C.dim} strokeDasharray="1 2" /></svg>DE-NOVO GHOST</span>
       <span className="inline-flex items-center gap-1.5"><svg width="18" height="9"><line x1="0" x2="18" y1="7.5" y2="7.5" stroke={C.ink} strokeWidth="1.2" /></svg>CP · CRITICAL PATH</span>
       <span className="inline-flex items-center gap-1.5"><span className="text-warn">REQ</span> MANDATORY</span>
+    </div>
+  );
+}
+
+/** Simple-view legend: plain words, four colours plus "time saved". */
+export function SimpleGanttLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-mute">
+      {(Object.keys(REUSE_STYLE) as (keyof typeof REUSE_STYLE)[]).map((k) => (
+        <span key={k} className="inline-flex items-center gap-1.5">
+          <svg width="18" height="10"><rect x="0.5" y="0.5" width="17" height="9" rx="1" fill={REUSE_STYLE[k].color} fillOpacity={k === 'new-work' ? 0.16 : 0.28} stroke={REUSE_STYLE[k].color} strokeDasharray={REUSE_STYLE[k].dash} /></svg>
+          {PLAIN_REUSE[k]}
+        </span>
+      ))}
+      <span className="inline-flex items-center gap-1.5"><svg width="18" height="10"><rect x="0.5" y="0.5" width="17" height="9" fill="none" stroke={C.dim} strokeDasharray="1 2" /></svg>Time saved</span>
     </div>
   );
 }

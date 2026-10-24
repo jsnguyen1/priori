@@ -6,6 +6,8 @@ import { Maximize2 } from 'lucide-react';
 import { SCN2A_LENGTH, regionAt } from '../../data/published';
 import { Segmented, cx } from '../../ui/primitives';
 import { MECH_COLOR, MECH_LABEL, prefersReducedMotion } from '../../ui/tokens';
+import { useSimple } from '../../ui/simple';
+import { PLAIN_MECH } from './plain';
 import { type AtlasIndex, EVIDENCE_LABEL, EVIDENCE_LEVELS, MECHS, lowerBound, regionOf, shortId } from './atlasData';
 import { type HoverTarget, type Layout, MIN_SPAN, binResFor, computeLayout, draw, levelOf, markXY } from './atlasDraw';
 
@@ -38,8 +40,10 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
   const tRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
   const zoomRef = useRef<d3.ZoomBehavior<HTMLCanvasElement, unknown> | null>(null);
   const hoverRef = useRef<HoverTarget | null>(null);
-  const propsRef = useRef({ mask, hidden, selected });
-  propsRef.current = { mask, hidden, selected };
+  const simple = useSimple();
+  const propsRef = useRef({ mask, hidden, selected, simple });
+  propsRef.current = { mask, hidden, selected, simple };
+  const resizeRef = useRef<(() => void) | null>(null);
   const rafRef = useRef(0);
   const panningRef = useRef(false);
   const scrubRef = useRef(false);
@@ -53,7 +57,7 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
     const ctx = ctxRef.current;
     if (!ctx) return;
     const p = propsRef.current;
-    draw(ctx, { xs: xs(), x0: x0Ref.current, index, mask: p.mask, hidden: p.hidden, selected: p.selected, hover: hoverRef.current, layout: layoutRef.current });
+    draw(ctx, { xs: xs(), x0: x0Ref.current, index, mask: p.mask, hidden: p.hidden, selected: p.selected, hover: hoverRef.current, layout: layoutRef.current, simple: p.simple });
   }, [index]);
 
   const schedule = useCallback(() => {
@@ -155,7 +159,7 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
       canvas.style.width = `${W}px`;
       canvas.style.height = `${H}px`;
       ctxRef.current?.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const Lo = computeLayout(W, H);
+      const Lo = computeLayout(W, H, propsRef.current.simple);
       layoutRef.current = Lo;
       x0Ref.current = d3.scaleLinear().domain(FULL).range([Lo.L, Lo.R]);
       zoom.extent([[Lo.L, 0], [Lo.R, H]]).translateExtent([[Lo.L, 0], [Lo.R, H]]);
@@ -164,6 +168,7 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
       sel.call(zoom.transform, transformFor(keep[0], keep[1]));
       render();
     };
+    resizeRef.current = resize;
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     resize();
@@ -191,6 +196,11 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
     schedule();
   }, [mask, hidden, selected, schedule]);
 
+  // View mode changes the layout (Simple drops the measurement sub-plot).
+  useEffect(() => {
+    resizeRef.current?.();
+  }, [simple]);
+
   // ── hit testing
   const hitTest = (mx: number, my: number): HoverTarget | null => {
     const Lo = layoutRef.current;
@@ -199,7 +209,7 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
     const [d0, d1] = scale.domain();
     const span = d1 - d0;
     const res = Math.round(scale.invert(mx));
-    const s = { xs: scale, x0: x0Ref.current, index, mask, hidden, selected, hover: null, layout: Lo };
+    const s = { xs: scale, x0: x0Ref.current, index, mask, hidden, selected, hover: null, layout: Lo, simple };
     if (my >= Lo.topo.y0 + 16 && my <= Lo.topo.y1) return { kind: 'region', region: regionAt(res) };
     if (my >= Lo.main.y0 && my <= Lo.meas.y1) {
       // patient marks first
@@ -329,21 +339,40 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
   return (
     <div data-tour="atlas.canvas" className="absolute inset-0 flex flex-col">
       <div className="h-9 shrink-0 flex items-center gap-3 px-3 border-b border-line2 bg-bg">
-        <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mute whitespace-nowrap">Mechanism landscape</span>
-        <span className="font-mono text-2xs text-dim whitespace-nowrap hidden xl:inline">SCN2A · NaV1.2 · Q99250</span>
+        {simple ? (
+          <span className="text-[13px] text-mute whitespace-nowrap">
+            Position along the protein <span className="text-ink">→</span>
+          </span>
+        ) : (
+          <>
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mute whitespace-nowrap">Mechanism landscape</span>
+            <span className="font-mono text-2xs text-dim whitespace-nowrap hidden xl:inline">SCN2A · NaV1.2 · Q99250</span>
+          </>
+        )}
         <div className="flex-1" />
+        {simple && <span className="text-2xs text-dim whitespace-nowrap">Zoom</span>}
         <Segmented
           value={level}
           onChange={zoomTo}
-          options={[
-            { value: 'LANDSCAPE', label: 'Landscape', title: 'Binned density per mechanism class' },
-            { value: 'VARIANTS', label: 'Variants', title: 'Individual records · position × net classifier score' },
-            { value: 'MEASUREMENTS', label: 'Measurements', title: 'Per-variant synthetic measurements ± SE' },
-          ]}
+          options={
+            simple
+              ? [
+                  { value: 'LANDSCAPE', label: 'Whole protein', title: 'How many changes of each colour sit at each stretch' },
+                  { value: 'VARIANTS', label: 'Region', title: 'Every change as a dot' },
+                  { value: 'MEASUREMENTS', label: 'Close-up', title: 'A few dozen building blocks' },
+                ]
+              : [
+                  { value: 'LANDSCAPE', label: 'Landscape', title: 'Binned density per mechanism class' },
+                  { value: 'VARIANTS', label: 'Variants', title: 'Individual records · position × net classifier score' },
+                  { value: 'MEASUREMENTS', label: 'Measurements', title: 'Per-variant synthetic measurements ± SE' },
+                ]
+          }
         />
-        <span className="font-mono text-2xs text-mute tabular-nums whitespace-nowrap min-w-[150px] text-right">
-          RES {Math.max(1, Math.ceil(view[0])).toLocaleString('en-US')}–{Math.min(SCN2A_LENGTH, Math.floor(view[1])).toLocaleString('en-US')} · {Math.round(span)} aa
-        </span>
+        {!simple && (
+          <span className="font-mono text-2xs text-mute tabular-nums whitespace-nowrap min-w-[150px] text-right">
+            RES {Math.max(1, Math.ceil(view[0])).toLocaleString('en-US')}–{Math.min(SCN2A_LENGTH, Math.floor(view[1])).toLocaleString('en-US')} · {Math.round(span)} aa
+          </span>
+        )}
         <button onClick={() => applyRange(FULL[0], FULL[1], 750)} title="Reset view" className="h-6 w-6 flex items-center justify-center border border-line rounded text-mute hover:text-ink hover:border-mute/60">
           <Maximize2 size={12} strokeWidth={1.5} />
         </button>
@@ -359,15 +388,16 @@ export const AtlasCanvas = forwardRef<AtlasCanvasHandle, Props>(function AtlasCa
           onClick={onClick}
         />
         <div ref={tipRef} className={cx('absolute left-0 top-0 z-20 pointer-events-none', !hover && 'hidden')}>
-          {hover && <Tooltip h={hover} index={index} hidden={hidden} />}
+          {hover && <Tooltip h={hover} index={index} hidden={hidden} simple={simple} />}
         </div>
       </div>
     </div>
   );
 });
 
-function Tooltip({ h, index, hidden }: { h: HoverTarget; index: AtlasIndex; hidden: Set<number> }) {
+function Tooltip({ h, index, hidden, simple }: { h: HoverTarget; index: AtlasIndex; hidden: Set<number>; simple: boolean }) {
   const box = 'bg-surface2 border border-line rounded px-2 py-1.5 font-mono text-2xs text-ink whitespace-nowrap shadow-[0_6px_18px_rgba(0,0,0,0.45)]';
+  if (simple) return <SimpleTooltip h={h} index={index} hidden={hidden} box={box} />;
   if (h.kind === 'variant') {
     const v = index.variants[h.i];
     const r = regionOf(index, h.i);
@@ -422,6 +452,45 @@ function Tooltip({ h, index, hidden }: { h: HoverTarget; index: AtlasIndex; hidd
       <div className="text-dim">
         {n} atlas records · UniProt Q99250 · click to frame
       </div>
+    </div>
+  );
+}
+
+function SimpleTooltip({ h, index, hidden, box }: { h: HoverTarget; index: AtlasIndex; hidden: Set<number>; box: string }) {
+  const sbox = box.replace('font-mono text-2xs', 'text-xs');
+  if (h.kind === 'variant') {
+    const v = index.variants[h.i];
+    const m = MECHS[index.mech[h.i]];
+    const known = !hidden.has(h.i);
+    return (
+      <div className={sbox}>
+        <div className="font-mono">
+          {v.patientIds.length > 0 ? <span className="text-cyan">{v.patientIds[0]}’s change</span> : <>Change at position {v.position.toLocaleString('en-US')}</>}
+        </div>
+        {known ? <div style={{ color: MECH_COLOR[m] }}>{PLAIN_MECH[m]}</div> : <div className="text-mute">Not measured yet</div>}
+      </div>
+    );
+  }
+  if (h.kind === 'bin') {
+    const total = h.counts.reduce((a, b) => a + b, 0);
+    return (
+      <div className={sbox}>
+        <div>{total} changes here</div>
+        <div className="flex gap-2 mt-0.5">
+          {MECHS.map((m, k) => (h.counts[k] ? (
+            <span key={m} style={{ color: MECH_COLOR[m] }}>
+              {h.counts[k]} {PLAIN_MECH[m].toLowerCase()}
+            </span>
+          ) : null))}
+        </div>
+        <div className="text-dim">click to zoom in</div>
+      </div>
+    );
+  }
+  return (
+    <div className={sbox}>
+      <div>{h.region.label}</div>
+      <div className="text-dim">click to zoom in</div>
     </div>
   );
 }

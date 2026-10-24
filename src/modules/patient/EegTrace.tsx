@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react';
 import { rngFor, gaussian } from '../../sim/rng';
 import { prefersReducedMotion } from '../../ui/tokens';
+import { useSimple } from '../../ui/simple';
 
 const CHANNELS = ['Fp1–F7', 'F7–T3', 'T3–T5', 'T5–O1', 'Fp1–F3', 'F3–C3', 'C3–P3', 'Fz–Cz', 'Fp2–F8', 'F8–T4', 'T4–T6', 'T6–O2'];
 const FS = 128; // samples / s
@@ -78,6 +79,9 @@ export function EegTrace({ frozen, dimmed = false }: { frozen: boolean; dimmed?:
   const dimRef = useRef(dimmed);
   dimRef.current = dimmed;
   const drawRef = useRef<() => void>(() => {});
+  const simple = useSimple();
+  const simpleRef = useRef(simple);
+  simpleRef.current = simple;
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -131,8 +135,10 @@ export function EegTrace({ frozen, dimmed = false }: { frozen: boolean; dimmed?:
       for (let c = 0; c < CHANNELS.length; c++) {
         const ch = channels[c];
         const yMid = top + rowH * (c + 0.5);
-        ctx.fillStyle = 'rgba(93,111,124,0.55)';
-        ctx.fillText(CHANNELS[c], 18, yMid);
+        if (!simpleRef.current) {
+          ctx.fillStyle = 'rgba(93,111,124,0.55)';
+          ctx.fillText(CHANNELS[c], 18, yMid);
+        }
         ctx.strokeStyle = `rgba(138,156,169,${traceAlpha})`;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -165,6 +171,12 @@ export function EegTrace({ frozen, dimmed = false }: { frozen: boolean; dimmed?:
       ctx.stroke();
 
       // scale + status annotations
+      if (simpleRef.current) {
+        ctx.fillStyle = 'rgba(93,111,124,0.6)';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText('BRAIN ACTIVITY (ILLUSTRATIVE) · BIG BURSTS = SEIZURE', x0, bottom + 15);
+        return;
+      }
       ctx.fillStyle = 'rgba(93,111,124,0.6)';
       ctx.textBaseline = 'alphabetic';
       ctx.fillText('EEG · BIPOLAR · 1 s/div · ILLUSTRATIVE TRACE', x0, bottom + 15);
@@ -198,7 +210,7 @@ export function EegTrace({ frozen, dimmed = false }: { frozen: boolean; dimmed?:
   // redraw once on freeze so the held state is rendered
   useEffect(() => {
     drawRef.current();
-  }, [frozen, dimmed]);
+  }, [frozen, dimmed, simple]);
 
   return (
     <div ref={wrapRef} className="absolute inset-0 pointer-events-none" aria-hidden>

@@ -9,7 +9,8 @@ import { Button, EvidenceBadge, KV, Label, ReuseTag, SectionHeader, Segmented, T
 import { C, MOTION, REUSE_STYLE } from '../../ui/tokens';
 import { assessBaseline, assessReuse, NODE_LABELS } from '../../sim/reuse';
 import { COST_CATEGORIES, SCENARIOS, TASKS, TASK_BY_ID, nodeClassFor, planDevelopment, sizeTask, totalCost } from '../../sim/development';
-import { DualGantt, GanttLegend } from './Gantt';
+import { DualGantt, GanttLegend, PLAIN_REUSE, PLAIN_TASK_NAME, SimpleGanttLegend } from './Gantt';
+import { BigStat, DetailOnly, Headline, useSimple } from '../../ui/simple';
 import { CohortChart } from './CohortChart';
 import { REUSE_ORDER, useTourScrollIntoView } from '../reuse/shared';
 
@@ -86,7 +87,7 @@ function Assumptions({ scenarioId, bespoke, priori }: { scenarioId: ReuseScenari
               </table>
             </div>
             <p>Each task carries de-novo effort (FTE-weeks), duration (calendar weeks) and cost (USD) as low / mid / high ranges. Its reuse class comes from the reuse-assessment node it maps to; the scenario multiplier scales effort, duration and cost, and reuse-with-validation adds a fixed validation overhead. Mandatory tasks (REQ) always run at full scope.</p>
-            <p>Timelines are scheduled on the task dependency graph by earliest start (forward pass) — a task starts when all predecessors finish. The timeline is the longest (critical) path, computed separately at low, mid and high durations; it is not the sum of task durations. Critical-path tasks have zero slack in a backward pass.</p>
+            <p>Timelines are scheduled on the task dependency graph by earliest start (forward pass), a task starts when all predecessors finish. The timeline is the longest (critical) path, computed separately at low, mid and high durations; it is not the sum of task durations. Critical-path tasks have zero slack in a backward pass.</p>
             <p>Cost categories are kept separate: evidence generation (preclinical research incl. toxicology), manufacturing (CMC, QC, GMP), regulatory and clinical. "Preclinical evidence cost" is the evidence-generation category only.</p>
             <p>Bespoke plan: {bespoke.tasks.length} tasks, all new work. Priori plan: classes taken from the reuse assessment. Ranges are scenario ranges, not statistical confidence intervals.</p>
           </div>
@@ -156,7 +157,7 @@ function TaskInspector({ taskId, bespoke, priori, assessment, scenarioId, onSele
         <div>
           <KV k="Evidence node" v={NODE_LABELS[t.nodeId]} />
           <KV k="Cost category" v={CAT_LABEL[t.costCategory]} />
-          <KV k="Mandatory" v={t.mandatory ? 'YES — never skipped or reduced' : 'no'} color={t.mandatory ? C.warn : undefined} />
+          <KV k="Mandatory" v={t.mandatory ? 'YES, never skipped or reduced' : 'no'} color={t.mandatory ? C.warn : undefined} />
           <KV k="Critical path (Priori)" v={sp.onCriticalPath ? 'yes' : 'no'} />
         </div>
         <div className="border-t border-line2 pt-2">
@@ -176,7 +177,7 @@ function TaskInspector({ taskId, bespoke, priori, assessment, scenarioId, onSele
         </div>
         <div>
           <Label className="mb-1">Depends on</Label>
-          {t.dependsOn.length === 0 ? <div className="text-2xs text-dim">— (start of program)</div> : (
+          {t.dependsOn.length === 0 ? <div className="text-2xs text-dim">start of program</div> : (
             <div className="flex flex-wrap gap-1">
               {t.dependsOn.map((d) => <button key={d} onClick={() => onSelect(d)} className="font-mono text-2xs px-1.5 h-[18px] border border-line rounded-sm text-mute hover:text-ink hover:border-mute">{d} {TASK_BY_ID[d].name}</button>)}
             </div>
@@ -197,6 +198,67 @@ function TaskInspector({ taskId, bespoke, priori, assessment, scenarioId, onSele
   );
 }
 
+const usdShort = (v: number) => {
+  const a = Math.abs(v);
+  const s = a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : `$${Math.round(a / 1e3)}k`;
+  return v < 0 ? `−${s}` : s;
+};
+const EstTag = () => <span className="font-mono text-[9.5px] tracking-[0.12em] text-dim border border-line rounded-sm px-1 py-px">ESTIMATE</span>;
+
+/** Simple view: three numbers, each computed from the two plans (mid values). */
+function SimpleStats({ bespoke, priori }: { bespoke: DevelopmentPlan; priori: DevelopmentPlan }) {
+  const weeksSaved = bespoke.timelineWeeks.mid - priori.timelineWeeks.mid;
+  const costSaved = totalCost(bespoke).mid - totalCost(priori).mid;
+  const workSaved = priori.duplicatedEffortAvoidedWeeks;
+  return (
+    <div className="grid grid-cols-3 gap-6 border border-line2 rounded bg-surface px-5 py-4">
+      <BigStat value={`${Math.round(weeksSaved)} wk`} color={weeksSaved > 0 ? C.cyan : C.ink} label={<>sooner to treatment <span className="text-dim">({wk(bespoke.timelineWeeks.mid)} → {wk(priori.timelineWeeks.mid)} weeks)</span></>} note={<EstTag />} />
+      <BigStat value={wk(workSaved)} color={workSaved > 0 ? C.cyan : C.ink} label="person-weeks of lab work not repeated" note={<EstTag />} />
+      <BigStat value={usdShort(costSaved)} color={costSaved > 0 ? C.cyan : C.ink} label={<>{costSaved >= 0 ? 'cheaper' : 'more expensive'} for this patient <span className="text-dim">({usdShort(totalCost(bespoke).mid)} → {usdShort(totalCost(priori).mid)})</span></>} note={<EstTag />} />
+    </div>
+  );
+}
+
+const PLAIN_WHY: Record<keyof typeof REUSE_STYLE, string> = {
+  reusable: 'Already done for an earlier patient, so it carries over as-is.',
+  'reuse-with-validation': 'Earlier work carries over, but needs a quick check first.',
+  'new-work': 'Nothing earlier covers this, so it has to be done fresh.',
+  'not-transferable': 'This can never carry over from another patient.',
+};
+
+/** Simple view: shown only when a bar is selected. */
+function SimpleTaskCard({ taskId, bespoke, priori, onClose }: { taskId: string; bespoke: DevelopmentPlan; priori: DevelopmentPlan; onClose: () => void }) {
+  const t = TASK_BY_ID[taskId];
+  const sb = bespoke.tasks.find((x) => x.task.id === taskId)!;
+  const sp = priori.tasks.find((x) => x.task.id === taskId)!;
+  const st = REUSE_STYLE[sp.reuseClass];
+  const rows: [string, string, string][] = [
+    ['Time', `${wk(sb.durationWeeks)} wk`, `${wk(sp.durationWeeks)} wk`],
+    ['Cost', usdShort(sb.costUsd), usdShort(sp.costUsd)],
+  ];
+  return (
+    <div className="p-5 space-y-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-[18px] leading-[24px] text-ink font-medium">{PLAIN_TASK_NAME[t.id] ?? t.name}</div>
+        <button onClick={onClose} className="text-mute hover:text-ink text-[18px] leading-none" aria-label="Close">×</button>
+      </div>
+      <div>
+        <div className="text-[15px] font-medium" style={{ color: st.color }}>{PLAIN_REUSE[sp.reuseClass]}</div>
+        <div className="mt-1 text-[14px] leading-[20px] text-mute">{t.mandatory ? 'Required for every patient, by design. It is never skipped or shortened.' : PLAIN_WHY[sp.reuseClass]}</div>
+      </div>
+      <table className="w-full text-[13px]">
+        <thead><tr className="text-dim text-left"><th className="font-normal pb-1.5" /><th className="font-normal text-right pb-1.5">From scratch</th><th className="font-normal text-right pb-1.5 text-cyan">With Priori</th></tr></thead>
+        <tbody>
+          {rows.map(([k, a, b]) => (
+            <tr key={k} className="border-t border-line2"><td className="py-2 text-mute">{k}</td><td className="text-right font-mono text-ink">{a}</td><td className="text-right font-mono text-cyan">{b}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="text-[12px] text-dim">Estimates from our model, not quotes. Switch to Detailed view for ranges and assumptions.</div>
+    </div>
+  );
+}
+
 function FinalMessage() {
   const lines = ['Patient 001 required new research.', 'Patient 002 inherited what we learned.', 'Patient 1,000 shouldn’t have to start from zero.'];
   return (
@@ -213,6 +275,7 @@ function FinalMessage() {
 }
 
 export function DevelopmentModule() {
+  const simple = useSimple();
   const dev = useStore((s) => s.development);
   const setScenario = useStore((s) => s.setScenario);
   const setPatient = useStore((s) => s.setDevelopmentPatient);
@@ -228,11 +291,27 @@ export function DevelopmentModule() {
 
   return (
     <Workspace
-      inspector={<TaskInspector taskId={dev.selectedTaskId} bespoke={bespoke} priori={priori} assessment={assessment} scenarioId={dev.scenarioId} onSelect={selectTask} />}
+      inspector={
+        simple
+          ? dev.selectedTaskId ? <SimpleTaskCard taskId={dev.selectedTaskId} bespoke={bespoke} priori={priori} onClose={() => selectTask(null)} /> : undefined
+          : <TaskInspector taskId={dev.selectedTaskId} bespoke={bespoke} priori={priori} assessment={assessment} scenarioId={dev.scenarioId} onSelect={selectTask} />
+      }
       inspectorWidth={330}
     >
       <div className="absolute inset-0 overflow-y-auto scroll-thin">
-        <div className="p-4 space-y-4 min-w-[700px]">
+        <Headline
+          step="6 / 6"
+          title="Same patient, two timelines: starting from scratch vs. starting from what we learned."
+          sub={pid === PRIMARY_PATIENT_ID ? 'Patient 001 was the first, so there was nothing to reuse yet. Both timelines are the same.' : 'Each bar is one step toward a treatment. Bars that shrink are work Priori didn’t have to repeat.'}
+          right={
+            <div className="flex flex-col items-end gap-1.5 pt-1">
+              <span className="text-[11px] text-dim">How optimistic should we be?</span>
+              <span data-tour="dev.scenario" className="inline-flex"><Segmented value={dev.scenarioId} onChange={setScenario} options={[{ value: 'conservative', label: 'Cautious estimate' }, { value: 'optimistic', label: 'Hopeful estimate' }]} /></span>
+            </div>
+          }
+        />
+        <div className={simple ? 'px-6 pb-6 space-y-5 min-w-[700px]' : 'p-4 space-y-4 min-w-[700px]'}>
+          <DetailOnly>
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="flex items-center gap-2"><Label>Development comparison</Label><EvidenceBadge category="assumption" /><EvidenceBadge category="illustrative" /></div>
@@ -243,43 +322,72 @@ export function DevelopmentModule() {
               <span data-tour="dev.scenario" className="inline-flex"><Segmented value={dev.scenarioId} onChange={setScenario} options={[{ value: 'conservative', label: 'Conservative' }, { value: 'optimistic', label: 'Optimistic' }]} /></span>
             </div>
           </div>
+          </DetailOnly>
 
-          {provenance === 'provisional' && (
+          {provenance === 'provisional' && simple && (
+            <div className="flex items-center justify-between gap-3 border border-gof/50 border-dashed rounded px-4 py-2.5 text-[13px] text-gof">
+              <span>Quick estimate: the full reuse check for this patient hasn’t been run yet.</span>
+              <Button size="sm" onClick={() => runReuseAssessment(pid)}>Run check</Button>
+            </div>
+          )}
+          {provenance === 'provisional' && !simple && (
             <div className="flex items-center justify-between gap-3 border border-gof/50 border-dashed rounded px-3 py-2 text-xs text-gof">
-              <span>PROVISIONAL — NOT RUN. The reuse assessment for {pid} has not been run; classes below are computed on the fly from the current library and may change after characterization.</span>
+              <span>PROVISIONAL, NOT RUN. The reuse assessment for {pid} has not been run; classes below are computed on the fly from the current library and may change after characterization.</span>
               <div className="flex gap-2 shrink-0">
                 <Button size="sm" onClick={() => runReuseAssessment(pid)}>Run assessment</Button>
                 <Button size="sm" variant="ghost" onClick={() => setModule('reuse')}>Reuse</Button>
               </div>
             </div>
           )}
-          {provenance === 'baseline' && (
+          {provenance === 'baseline' && !simple && (
             <div className="border border-line2 rounded px-3 py-2 text-xs text-mute">
               {PRIMARY_PATIENT_ID} was the first program: the library held only published biology and the atlas prior, so the reuse engine classifies every task as new work and both timelines coincide.
             </div>
           )}
 
-          <div data-tour="dev.summary"><Metrics bespoke={bespoke} priori={priori} /></div>
+          <div data-tour="dev.summary">{simple ? <SimpleStats bespoke={bespoke} priori={priori} /> : <Metrics bespoke={bespoke} priori={priori} />}</div>
 
           <div data-tour="dev.timelines" className="border border-line2 rounded bg-surface">
-            <SectionHeader title="Program timelines · shared week axis" right={<GanttLegend />} />
-            <div className="p-3 overflow-x-auto scroll-thin">
+            {simple ? (
+              <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-4 border-b border-line2">
+                <SimpleGanttLegend />
+                <span className="text-[12px] text-dim shrink-0">Click a bar for details</span>
+              </div>
+            ) : (
+              <SectionHeader title="Program timelines · shared week axis" right={<GanttLegend />} />
+            )}
+            <div className={simple ? 'px-4 py-3 overflow-x-auto scroll-thin' : 'p-3 overflow-x-auto scroll-thin'}>
               <DualGantt
-                plans={[
-                  { title: 'CONVENTIONAL BESPOKE RESEARCH', sub: 'every task de novo', plan: bespoke, ghost: false },
-                  { title: 'PRIORI EVIDENCE REUSE', sub: provenance === 'run' ? `classes from reuse assessment · ${assessment.rulesVersion}` : provenance === 'provisional' ? 'classes from provisional assessment (not run)' : 'classes from baseline assessment (seed library only)', plan: priori, ghost: true },
-                ]}
+                simple={simple}
+                plans={
+                  simple
+                    ? [
+                        { title: 'Starting from scratch', sub: '', plan: bespoke, ghost: false },
+                        { title: 'With Priori', sub: '', plan: priori, ghost: true },
+                      ]
+                    : [
+                        { title: 'CONVENTIONAL BESPOKE RESEARCH', sub: 'every task de novo', plan: bespoke, ghost: false },
+                        { title: 'PRIORI EVIDENCE REUSE', sub: provenance === 'run' ? `classes from reuse assessment · ${assessment.rulesVersion}` : provenance === 'provisional' ? 'classes from provisional assessment (not run)' : 'classes from baseline assessment (seed library only)', plan: priori, ghost: true },
+                      ]
+                }
                 selectedTaskId={dev.selectedTaskId}
                 onSelect={selectTask}
               />
             </div>
           </div>
 
-          <Assumptions scenarioId={dev.scenarioId} bespoke={bespoke} priori={priori} />
+          <DetailOnly><Assumptions scenarioId={dev.scenarioId} bespoke={bespoke} priori={priori} /></DetailOnly>
 
           <div data-tour="dev.cohort" className="border border-line2 rounded bg-surface">
-            <SectionHeader title="Long-term scalability · cumulative cost vs cohort size" right={<span className="font-mono text-2xs text-mute">{SCENARIOS[dev.scenarioId].label} scenario</span>} />
-            <div className="p-3"><CohortChart scenarioId={dev.scenarioId} /></div>
+            {simple ? (
+              <div className="px-4 pt-4 pb-1 flex items-baseline justify-between gap-4">
+                <div className="text-[16px] text-ink font-medium">As the library grows, each new patient gets cheaper</div>
+                <span className="font-mono text-[10px] tracking-[0.12em] text-dim">{dev.scenarioId === 'optimistic' ? 'HOPEFUL' : 'CAUTIOUS'} ESTIMATE</span>
+              </div>
+            ) : (
+              <SectionHeader title="Long-term scalability · cumulative cost vs cohort size" right={<span className="font-mono text-2xs text-mute">{SCENARIOS[dev.scenarioId].label} scenario</span>} />
+            )}
+            <div className={simple ? 'px-4 pb-4 pt-2' : 'p-3'}><CohortChart scenarioId={dev.scenarioId} simple={simple} /></div>
           </div>
 
           <FinalMessage />

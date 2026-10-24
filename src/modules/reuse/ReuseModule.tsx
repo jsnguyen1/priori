@@ -9,10 +9,12 @@ import { C, MOTION } from '../../ui/tokens';
 import { getPatient } from '../../data/patients';
 import { getClassification, getVariant } from '../../data/variants';
 import { regionById } from '../../data/published';
-import { assessBaseline, transferableLibrary, NODE_LABELS } from '../../sim/reuse';
+import { assessBaseline, transferableLibrary, tallyClasses, NODE_LABELS, NODE_IDS } from '../../sim/reuse';
+import { BigStat, DetailOnly, Headline, SimpleOnly, useSimple } from '../../ui/simple';
+import type { MechanismClass, ReuseAssessment } from '../../domain/types';
 import { ReuseGraph, ReuseLegend } from './ReuseGraph';
 import { NodeInspector } from './NodeInspector';
-import { Pathways } from './Pathways';
+import { Pathways, SimplePathways } from './Pathways';
 import { SOURCE_LABEL, VALIDATION_LABEL, useTourScrollIntoView } from './shared';
 
 // ─── Sidebar: the retained evidence library ──────────────────────────────
@@ -76,7 +78,7 @@ function LibraryHandoff({ library }: { library: EvidenceArtifact[] }) {
         <div>
           <Label>Act III · Evidence reuse</Label>
           <div className="mt-1 text-md text-ink">What the {PRIMARY_PATIENT_ID} program left behind</div>
-          <div className="text-xs text-mute mt-0.5">Every artifact carries structured provenance and typed reuse conditions. Nothing is copied forward by assumption — each item is re-evaluated against the next patient.</div>
+          <div className="text-xs text-mute mt-0.5">Every artifact carries structured provenance and typed reuse conditions. Nothing is copied forward by assumption, each item is re-evaluated against the next patient.</div>
         </div>
 
         <div className="border border-line2 rounded bg-surface">
@@ -102,8 +104,8 @@ function LibraryHandoff({ library }: { library: EvidenceArtifact[] }) {
                     <td className="px-3 py-1 font-mono text-2xs text-cyan">{a.id}</td>
                     <td className="px-3 py-1 text-ink">{NODE_LABELS[a.kind as EvidenceNodeId] ?? a.kind}</td>
                     <td className="px-3 py-1 text-mute">{SOURCE_LABEL[a.provenance.sourceType]}</td>
-                    <td className="px-3 py-1 font-mono text-2xs text-mute">{a.provenance.mechanism ?? '—'}</td>
-                    <td className="px-3 py-1 font-mono text-2xs text-mute">{a.provenance.protocolVersion ?? '—'}</td>
+                    <td className="px-3 py-1 font-mono text-2xs text-mute">{a.provenance.mechanism ?? 'n/a'}</td>
+                    <td className="px-3 py-1 font-mono text-2xs text-mute">{a.provenance.protocolVersion ?? 'n/a'}</td>
                     <td className="px-3 py-1 text-mute">{VALIDATION_LABEL[a.provenance.validationStatus]}</td>
                   </tr>
                 ))}
@@ -131,6 +133,95 @@ function LibraryHandoff({ library }: { library: EvidenceArtifact[] }) {
     </div>
   );
 }
+
+// ─── Simple view pieces ──────────────────────────────────────────────────
+
+const PLAIN_MECH: Record<MechanismClass, { label: string; color: string }> = {
+  LoF: { label: 'Too weak (loss of function)', color: C.lof },
+  GoF: { label: 'Too active (gain of function)', color: C.gof },
+  mixed: { label: 'Mixed', color: C.mixed },
+  indeterminate: { label: 'Unknown', color: C.indet },
+};
+
+const sentence = (x: string) => x.toLowerCase().replace(/ · /g, ', ').replace(/^./, (c) => c.toUpperCase());
+
+function SimpleHandoff({ library }: { library: EvidenceArtifact[] }) {
+  const loadNewPatient = useStore((s) => s.loadNewPatient);
+  const setModule = useStore((s) => s.setModule);
+  const loaded = useStore((s) => s.loadedPatientIds.includes(SECOND_PATIENT_ID));
+  const fromP1 = library.filter((a) => a.provenance.originatingPatientId === PRIMARY_PATIENT_ID).length;
+  const p2 = getPatient(SECOND_PATIENT_ID);
+  const v2 = getVariant(p2.variantId)!;
+  return (
+    <div className="h-full overflow-y-auto scroll-thin">
+      <Headline
+        step="5 / 6 · EVIDENCE REUSE"
+        title="Months later, a second child arrives with a different change in the same gene."
+        sub="Everything learned for the first child was saved. How much of it can this child use?"
+      />
+      <div className="px-6 pb-6 grid grid-cols-[1fr_320px] gap-5 max-w-[1100px]">
+        <div className="border border-cyan/40 rounded bg-surface p-6 flex flex-col gap-5">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] text-mute">New patient · {p2.id}</span>
+            <EvidenceBadge category="hypothetical" />
+          </div>
+          <div>
+            <div className="text-[20px] leading-[26px] text-ink">{p2.ageAtPresentation.toLowerCase()} old</div>
+            <div className="text-[14px] text-mute mt-1">{sentence(p2.presentation)}</div>
+          </div>
+          <div className="text-[14px] text-ink">
+            Mutation <span className="font-mono text-cyan">{v2.hgvsP}</span> <span className="text-mute">· same gene (SCN2A), different spot.</span>
+          </div>
+          <div>
+            <Button data-tour="reuse.load" variant="primary" size="lg" onClick={() => loadNewPatient(SECOND_PATIENT_ID)}>
+              {loaded ? `Resume ${SECOND_PATIENT_ID}` : 'Load new patient'}
+            </Button>
+          </div>
+        </div>
+        <div data-tour="reuse.library" className="border border-line2 rounded bg-surface p-6 flex flex-col gap-4">
+          <BigStat value={fromP1} label={`results saved from the first child (${PRIMARY_PATIENT_ID})`} color={fromP1 ? C.cyan : C.gof} />
+          <div className="text-[13px] leading-[19px] text-mute">
+            {fromP1 ? 'Kept in a shared library. Loading a new patient does not erase it.' : 'Nothing was saved yet, so this child would start from scratch.'}
+          </div>
+          {!fromP1 && (
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => setModule('lab')}>Open lab</Button>
+              <Button size="sm" onClick={() => setModule('therapy')}>Open therapy</Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Match({ label, same }: { label: string; same: boolean | null }) {
+  const color = same === null ? C.dim : same ? C.cyan : C.gof;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[13px] text-ink">
+      <span className="font-mono" style={{ color }}>{same === null ? '?' : same ? '✓' : '✗'}</span>
+      {label}
+    </span>
+  );
+}
+
+function SimpleStep({ n, title, status, statusColor, children }: { n: number; title: string; status: ReactNode; statusColor?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 flex-1 min-w-0">
+      <span className="w-6 h-6 rounded-full border border-line flex items-center justify-center font-mono text-[11px] text-mute shrink-0">{n}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] text-ink">{title}</div>
+        <div className="text-[12px] text-mute truncate" style={{ color: statusColor }}>{status}</div>
+      </div>
+      <div className="shrink-0">{children}</div>
+    </div>
+  );
+}
+
+const carriedOver = (a: ReuseAssessment) => {
+  const t = tallyClasses(a);
+  return { t, carried: t.reusable + t['reuse-with-validation'], total: a.nodes.length || NODE_IDS.length };
+};
 
 // ─── Phase B: PX-002 reuse workflow ──────────────────────────────────────
 
@@ -185,7 +276,7 @@ function contrastNote(p2Characterized: boolean): string {
   const where = r2 ? `${r2.kind}-region` : 'new';
   const mech = p2Characterized ? `${getClassification(v2.id).mechanism} (simulated) ${where} variant` : `${where} variant of unknown mechanism until characterized`;
   const diff = [v1.hgvsP !== v2.hgvsP && 'different residue', r1 && r2 && r1.domain !== r2.domain && 'different domain'].filter(Boolean).join(', ');
-  return `Same channel. ${mech}.${diff ? ` ${diff[0].toUpperCase()}${diff.slice(1)}` : ''} — prior evidence cannot simply be assumed.`;
+  return `Same channel. ${mech}.${diff ? ` ${diff[0].toUpperCase()}${diff.slice(1)}` : ''}, prior evidence cannot simply be assumed.`;
 }
 
 function StepRow({ n, title, status, children }: { n: string; title: string; status: ReactNode; children: ReactNode }) {
@@ -223,14 +314,110 @@ function SecondPatientFlow({ library }: { library: EvidenceArtifact[] }) {
   const stale = !!assessment && (assessment.targetMechanism !== ctx.mechanism || assessment.libraryArtifactIds.length !== transferableLibrary(ctx, library).length);
   const fromP1 = library.filter((a) => a.provenance.originatingPatientId === PRIMARY_PATIENT_ID).length;
   useTourScrollIntoView('reuse.');
+  const simple = useSimple();
+  const selNode = assessment?.nodes.find((n) => n.nodeId === selected) ?? null;
+  const r1 = regionById(v1.regionId);
+  const r2 = regionById(v2.regionId);
+  const mech2 = st2 === 'complete' ? PLAIN_MECH[getClassification(v2.id).mechanism] : null;
+  const sum = assessment ? carriedOver(assessment) : null;
+  const pathwayRows = assessment
+    ? [
+        { label: 'First child', sub: PRIMARY_PATIENT_ID, assessment: baseline },
+        { label: 'This child', sub: SECOND_PATIENT_ID, assessment },
+      ]
+    : [];
 
   return (
     <Workspace
       sidebar={<LibrarySidebar library={library} highlight={selected} />}
-      inspector={<NodeInspector assessment={assessment} library={library} node={assessment?.nodes.find((n) => n.nodeId === selected) ?? null} />}
+      inspector={simple && !selNode ? undefined : <NodeInspector assessment={assessment} library={library} node={selNode} onClose={() => selectReuseNode(null)} />}
       sidebarWidth={250}
-      inspectorWidth={330}
+      inspectorWidth={simple ? 340 : 330}
     >
+      <SimpleOnly>
+        <div className="absolute inset-0 overflow-y-auto scroll-thin">
+          <Headline
+            step="5 / 6 · EVIDENCE REUSE"
+            title={assessment ? 'Different patient, different mutation, but much of the work carries over.' : 'Months later, a second child arrives with a different change in the same gene.'}
+            sub={
+              assessment && sum
+                ? `${sum.t.reusable} reused as-is, ${sum.t['reuse-with-validation']} after a check. ${sum.t['new-work'] + sum.t['not-transferable']} still have to be done fresh for this child.`
+                : 'First we test this child’s own mutation, then check which saved work still applies.'
+            }
+          />
+          <div className="px-6 pb-6 space-y-4">
+            {/* steps + what's different */}
+            <div className="border border-line2 rounded bg-surface px-4 py-3 space-y-3">
+              <div className="flex items-center gap-6">
+                <SimpleStep
+                  n={1}
+                  title="Test this child’s mutation"
+                  status={st2 === 'complete' ? <>Result: <span style={{ color: mech2!.color }}>{mech2!.label}</span> · simulated</> : st2 === 'running' ? 'Testing in the virtual lab…' : 'Not tested yet, the type of problem is unknown'}
+                >
+                  <Button data-tour="reuse.characterize" size="sm" variant={st2 === 'idle' ? 'primary' : 'default'} disabled={st2 !== 'idle'} onClick={() => runAnalysis(v2.id)}>{st2 === 'running' ? 'Testing' : st2 === 'complete' ? 'Done' : 'Test mutation'}</Button>
+                </SimpleStep>
+                <div className="w-px self-stretch bg-line2" />
+                <SimpleStep
+                  n={2}
+                  title="Check what carries over"
+                  status={!assessment ? 'Not checked yet' : stale ? 'Inputs changed, run again' : 'Done'}
+                  statusColor={stale ? C.gof : undefined}
+                >
+                  <Button data-tour="reuse.assess" size="sm" variant={!assessment || stale ? 'primary' : 'default'} onClick={() => runReuseAssessment(SECOND_PATIENT_ID)}>{assessment ? 'Re-run check' : 'Run reuse check'}</Button>
+                </SimpleStep>
+              </div>
+              <div className="flex items-center gap-5 border-t border-line2 pt-2.5">
+                <span className="text-[12px] text-mute">Compared with the first child:</span>
+                <Match label="Same gene" same />
+                <Match label="Same spot in the protein" same={!!r1 && !!r2 && r1.id === r2.id} />
+                <Match label="Same type of problem" same={p1Char && st2 === 'complete' ? getClassification(v1.id).mechanism === getClassification(v2.id).mechanism : null} />
+              </div>
+            </div>
+
+            {/* graph + pathways */}
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,400px)] gap-4">
+              <div className="border border-line2 rounded bg-surface">
+                <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-3">
+                  <div className="text-[14px] text-ink">The 11 parts of developing a treatment</div>
+                  <span className="text-[12px] text-dim">{assessment ? 'Click a box to see why' : 'Run the check to colour them'}</span>
+                </div>
+                <div data-tour="reuse.graph" className="px-2 pb-2">
+                  <ReuseGraph assessment={assessment} library={library} selected={selected} onSelect={(id) => selectReuseNode(id)} sourcePatientLabel={fromP1 ? PRIMARY_PATIENT_ID : 'EMPTY'} />
+                </div>
+              </div>
+              <div className="flex flex-col gap-4">
+                <AnimatePresence>
+                  {assessment && (
+                    <motion.div key="reveal-s" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: MOTION.slow, ease: MOTION.ease, delay: 0.3 }} className="border border-line2 rounded bg-surface p-4 flex flex-col gap-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <BigStat
+                          value={<>{sum!.carried} <span className="text-[20px] text-dim">of {sum!.total}</span></>}
+                          label="parts of the work reused or adapted"
+                          color={C.cyan}
+                          note={stale ? 'inputs changed, re-run to update' : 'rule-based estimate'}
+                        />
+                        <EvidenceBadge category="illustrative" />
+                      </div>
+                      <div data-tour="reuse.pathways" className="border-t border-line2 pt-3">
+                        <SimplePathways rows={pathwayRows} />
+                      </div>
+                      <div className="text-[13px] leading-[19px] text-mute">Each child still gets their own safety studies and clinical evidence, earlier work only helps design them.</div>
+                      <div>
+                        <Button data-tour="reuse.openDev" variant="primary" size="lg" onClick={() => setModule('development')}>See time &amp; cost saved</Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <div className="border border-line2 rounded bg-surface p-4">
+                  <div className="text-[12px] text-mute mb-2.5">What the colours mean</div>
+                  <ReuseLegend className="flex-col !items-start gap-y-2" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SimpleOnly>
+      <DetailOnly>
       <div className="absolute inset-0 overflow-y-auto scroll-thin">
         <div className="p-4 space-y-4 min-w-[660px]">
           {/* patient header */}
@@ -249,11 +436,11 @@ function SecondPatientFlow({ library }: { library: EvidenceArtifact[] }) {
             </div>
             <div className="border border-line2 rounded bg-surface px-3 pb-1">
               <div className="h-8 flex items-center"><Label>Workflow</Label></div>
-              <StepRow n="01" title={`Functional characterization · ${v2.hgvsP}`} status={st2 === 'complete' ? `complete · ${getClassification(v2.id).mechanism} (simulated)` : st2 === 'running' ? 'running synthetic patch-clamp…' : 'not run — mechanism unknown'}>
+              <StepRow n="01" title={`Functional characterization · ${v2.hgvsP}`} status={st2 === 'complete' ? `complete · ${getClassification(v2.id).mechanism} (simulated)` : st2 === 'running' ? 'running synthetic patch-clamp…' : 'not run, mechanism unknown'}>
                 <Button data-tour="reuse.characterize" size="sm" variant={st2 === 'idle' ? 'primary' : 'default'} disabled={st2 !== 'idle'} onClick={() => runAnalysis(v2.id)}>{st2 === 'running' ? 'Running' : st2 === 'complete' ? 'Done' : 'Characterize'}</Button>
                 <Button size="sm" variant="ghost" onClick={() => setModule('lab')}>Lab</Button>
               </StepRow>
-              <StepRow n="02" title="Reuse assessment vs evidence library" status={!assessment ? 'not run' : stale ? 'inputs changed — re-run to update' : `complete · ${assessment.rulesVersion}`}>
+              <StepRow n="02" title="Reuse assessment vs evidence library" status={!assessment ? 'not run' : stale ? 'inputs changed, re-run to update' : `complete · ${assessment.rulesVersion}`}>
                 <Button data-tour="reuse.assess" size="sm" variant={!assessment || stale ? 'primary' : 'default'} onClick={() => runReuseAssessment(SECOND_PATIENT_ID)}>{assessment ? 'Re-run assessment' : 'Run reuse assessment'}</Button>
               </StepRow>
               {st2 !== 'complete' && <div className="text-2xs text-gof py-1.5 border-t border-line2">Without characterization the target mechanism is unknown, so mechanism-dependent evidence cannot transfer.</div>}
@@ -300,6 +487,7 @@ function SecondPatientFlow({ library }: { library: EvidenceArtifact[] }) {
           </AnimatePresence>
         </div>
       </div>
+      </DetailOnly>
     </Workspace>
   );
 }
@@ -322,7 +510,10 @@ export function ReuseModule() {
           <SecondPatientFlow library={library} />
         ) : (
           <Workspace sidebar={<LibrarySidebar library={library} highlight={null} />} sidebarWidth={250}>
-            <div className="absolute inset-0"><LibraryHandoff library={library} /></div>
+            <div className="absolute inset-0">
+              <SimpleOnly><SimpleHandoff library={library} /></SimpleOnly>
+              <DetailOnly><LibraryHandoff library={library} /></DetailOnly>
+            </div>
           </Workspace>
         )}
       </motion.div>

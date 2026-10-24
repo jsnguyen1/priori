@@ -1,5 +1,6 @@
 // Concise definitions for hover tooltips. Add entries as needed; keep each under ~40 words.
 export const GLOSSARY = {
+  scn2a: { term: 'SCN2A', definition: 'A gene that encodes NaV1.2, a sodium channel in brain cells. Changes in SCN2A can make the channel too active or too weak, causing seizures, autism or developmental delay.' },
   gof: { term: 'Gain of function', definition: 'A variant that increases channel activity, e.g. by shifting activation to more negative voltages, impairing inactivation or increasing persistent current.' },
   lof: { term: 'Loss of function', definition: 'A variant that reduces channel activity, e.g. by lowering surface expression or conductance, or shifting gating so fewer channels open.' },
   mixed: { term: 'Mixed mechanism', definition: 'A variant with opposing biophysical effects (some increasing, some decreasing function). Net neuronal effect cannot be inferred from channel parameters alone.' },

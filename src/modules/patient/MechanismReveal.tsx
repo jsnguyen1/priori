@@ -8,6 +8,8 @@ import { MEASUREMENT_META } from '../../sim/channel';
 import { PRIMARY_PATIENT_ID, type Decision } from '../../state/store';
 import { Button, EvidenceBadge, Label, MechanismTag, fmt } from '../../ui/primitives';
 import { C, MECH_COLOR, MOTION } from '../../ui/tokens';
+import { BigStat, useSimple } from '../../ui/simple';
+import { plainMech } from './plain';
 
 interface Metric {
   label: string;
@@ -89,7 +91,90 @@ const fade = (i: number) => ({
   transition: { duration: MOTION.slow, ease: MOTION.ease, delay: 0.12 + i * 0.22 },
 });
 
-export function MechanismReveal({ decision, onOpenAtlas }: { decision: Decision; onOpenAtlas: () => void }) {
+function SimpleReveal({ decision, onOpenAtlas }: { decision: Decision; onOpenAtlas: () => void }) {
+  const v = getVariant(getPatient(PRIMARY_PATIENT_ID).variantId)!;
+  const c = getClassification(v.id);
+  const pk = getProfile(v.id).peakDensity;
+  const ratio = pk.value / pk.reference;
+  const pct = Math.round(ratio * 100);
+  const color = MECH_COLOR[c.mechanism];
+  const administered = decision.choice === 'administer';
+  const blockerLine =
+    c.mechanism === 'LoF'
+      ? 'A channel blocker would weaken it further.'
+      : c.mechanism === 'GoF'
+        ? 'A channel blocker would push it back toward normal.'
+        : 'It is unclear what a channel blocker would do.';
+  const fit =
+    c.mechanism === 'LoF'
+      ? administered
+        ? 'So in this simulation, the drug pushed in the wrong direction.'
+        : 'So in this simulation, waiting for evidence was the safer call.'
+      : null;
+  const cite = CITATIONS.wolff2017?.short;
+  const barW = (f: number) => `${Math.max(2, Math.min(100, (f / Math.max(1, ratio)) * 100))}%`;
+  return (
+    <div className="space-y-5">
+      <motion.section {...fade(0)} data-tour="patient.reveal" className="border border-line2 rounded bg-black/70 px-6 py-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-[13px] text-mute">What a lab test of this gene change would show</div>
+          <EvidenceBadge category="simulated" />
+        </div>
+        <div className="flex items-center gap-10">
+          <div className="shrink-0 w-[200px]">
+            <BigStat value={`${pct}%`} label="of normal sodium current" color={color} />
+          </div>
+          <div className="flex-1 min-w-0 space-y-2.5">
+            {[
+              { name: 'Normal gene', f: 1, col: C.mute },
+              { name: 'This patient', f: ratio, col: color },
+            ].map((b) => (
+              <div key={b.name} className="flex items-center gap-3">
+                <span className="w-[92px] shrink-0 text-[13px] text-mute">{b.name}</span>
+                <div className="flex-1 h-3 rounded-sm bg-line2/60 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-sm"
+                    style={{ background: b.col }}
+                    initial={{ width: 0 }}
+                    animate={{ width: barW(b.f) }}
+                    transition={{ duration: 0.8, ease: MOTION.ease, delay: 0.3 }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-5 text-[17px] leading-[24px] text-ink">
+          <span style={{ color }}>{plainMech(c.mechanism)}.</span> {blockerLine}
+        </div>
+        {fit && <div className="mt-1 text-[14px] text-mute">{fit}</div>}
+      </motion.section>
+
+      <motion.p {...fade(1)} className="text-[13px] leading-[19px] text-mute px-1">
+        Published studies: seizures this early are usually caused by a too-active channel, so a blocker is a reasonable first guess.
+        {cite && <span className="text-dim"> ({cite})</span>}
+      </motion.p>
+
+      <motion.section {...fade(2)} data-mech-punchline className="pt-4 pb-2 flex items-center justify-between gap-6 border-t border-line2">
+        <div className="text-[19px] leading-[26px] text-ink">
+          The problem wasn&rsquo;t the decision.
+          <br />
+          <span className="text-cyan">It was the missing evidence.</span>
+        </div>
+        <Button data-tour="patient.openAtlas" variant="primary" size="lg" onClick={onOpenAtlas} className="shrink-0">
+          OPEN MECHANISM ATLAS <ArrowRight size={14} strokeWidth={1.5} />
+        </Button>
+      </motion.section>
+    </div>
+  );
+}
+
+export function MechanismReveal(props: { decision: Decision; onOpenAtlas: () => void }) {
+  const simple = useSimple();
+  return simple ? <SimpleReveal {...props} /> : <DetailedReveal {...props} />;
+}
+
+function DetailedReveal({ decision, onOpenAtlas }: { decision: Decision; onOpenAtlas: () => void }) {
   const p = getPatient(PRIMARY_PATIENT_ID);
   const v = getVariant(p.variantId)!;
   const c = getClassification(v.id);

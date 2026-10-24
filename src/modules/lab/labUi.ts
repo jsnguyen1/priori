@@ -1,9 +1,9 @@
 // Lab-local transient UI state (hover / linkage) and the measurement ↔ structure linkage map.
 import { create } from 'zustand';
-import type { MeasurementKey, ProteinRegion } from '../../domain/types';
+import type { MeasurementKey, MechanismClassification, ProteinRegion } from '../../domain/types';
 import { REGIONS, regionById } from '../../data/published';
 import { GLOSSARY } from '../../ui/glossary';
-import { getClassification } from '../../data/variants';
+import { getClassification, getProfile } from '../../data/variants';
 import { useStore } from '../../state/store';
 import { C, MECH_COLOR } from '../../ui/tokens';
 
@@ -76,4 +76,31 @@ export function useVariantStatus(variantId: string) {
   const classification = classified ? getClassification(variantId) : null;
   const color = classification ? MECH_COLOR[classification.mechanism] : C.ink;
   return { status, classified, classification, color };
+}
+
+// ─── Simple-view language ────────────────────────────────────────────────
+
+export const PLAIN_MECH: Record<MechanismClassification['mechanism'], string> = {
+  LoF: 'Too weak (loss of function)',
+  GoF: 'Too active (gain of function)',
+  mixed: 'Mixed (some of each)',
+  indeterminate: 'Unknown (not enough evidence)',
+};
+
+/**
+ * The single number a non-specialist should take away, derived from the variant's
+ * simulated functional profile (never hardcoded). Defaults to peak current vs normal;
+ * for "too active" channels whose peak is near normal, uses the clearer deviation.
+ */
+export function simpleTakeaway(variantId: string, mechanism: MechanismClassification['mechanism']): { value: string; label: string } {
+  const p = getProfile(variantId);
+  const peak = p.peakDensity.value / p.peakDensity.reference;
+  const peakStat = { value: `${Math.round(peak * 100)}%`, label: 'of normal peak sodium current' };
+  if (mechanism !== 'GoF' && mechanism !== 'mixed') return peakStat;
+  if (Math.abs(1 - peak) >= 0.3) return peakStat;
+  const leak = p.persistentPct.value / p.persistentPct.reference;
+  if (leak >= 1.5) return { value: `${leak.toFixed(1)}×`, label: 'normal leftover current (fails to shut fully)' };
+  const shift = p.vHalfAct.value - p.vHalfAct.reference;
+  if (shift <= -3) return { value: `${Math.abs(shift).toFixed(0)} mV`, label: 'earlier opening than normal' };
+  return peakStat;
 }

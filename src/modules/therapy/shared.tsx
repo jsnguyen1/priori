@@ -122,3 +122,51 @@ export function ramp(t: number, from = '#152029', to = '#40D8D0'): string {
 }
 
 export const nt = (x: number) => `${x.toLocaleString()} nt`;
+
+// ─── Simple-view plain language ──────────────────────────────────────────
+
+export const PLAIN_STRATEGY: Record<string, { name: string; what: string }> = {
+  'rna-upregulation': {
+    name: 'Make more of the healthy channel',
+    what: 'A short custom strand (an ASO) helps cells read more of the gene message, so they build more working channels.',
+  },
+  'splice-modulation': {
+    name: 'Fix how the gene message is cut',
+    what: 'An ASO stops cells from cutting the message into a useless version, so more of it becomes working channel.',
+  },
+  'allele-selective-suppression': {
+    name: 'Silence the faulty copy',
+    what: 'An ASO turns down only the faulty copy of the gene, leaving the healthy copy alone.',
+  },
+  'small-molecule-mechanism-matched': {
+    name: 'A pill that calms the channel',
+    what: 'A small-molecule drug that dampens overactive sodium channels directly. It acts on the protein, not the gene message.',
+  },
+  'further-characterization': {
+    name: 'Run more tests first',
+    what: 'Collect more lab evidence before choosing any drug direction.',
+  },
+};
+
+export const PLAIN_OUTCOME: Record<ScreeningOutcome, string> = {
+  pass: 'Worked',
+  mixed: 'Partly',
+  fail: 'Failed',
+  'excluded-uncertainty': 'Too uncertain',
+};
+
+/** Predicted fit = geometric mean of binding and specificity (illustrative model scores). */
+export const predictedFit = (c: { bindingScore: number; specificityScore: number }) => Math.sqrt(c.bindingScore * c.specificityScore);
+
+const PLAIN_REGION: Record<string, string> = {
+  uorf: 'Brake switch at the start (uORF)',
+  utr5: 'Front end of the message (5′ UTR)',
+  utr3: 'Tail end of the message (3′ UTR)',
+  'utr3-reg': 'Stability switch in the tail (3′ UTR)',
+  'pe-3ss': 'Start of the faulty cut site',
+  'poison-exon': 'Faulty "poison" section',
+  'pe-5ss': 'End of the faulty cut site',
+};
+
+/** Plain-language region name for Simple view; falls back to the model label. */
+export const plainRegion = (r: { id: string; label: string }) => PLAIN_REGION[r.id] ?? r.label.replace(/ \((approximate|schematic)\)/, '');

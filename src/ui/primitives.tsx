@@ -190,8 +190,8 @@ export function UncertaintyBar({ low, mid, high, min, max, color = C.cyan, width
 }
 
 export const fmt = {
-  num: (v: number, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : '—'),
-  signed: (v: number, d = 1) => (Number.isFinite(v) ? `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(d)}` : '—'),
+  num: (v: number, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : 'n/a'),
+  signed: (v: number, d = 1) => (Number.isFinite(v) ? `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(d)}` : 'n/a'),
   pct: (v: number, d = 0) => `${(v * 100).toFixed(d)}%`,
   usd: (v: number) => (Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : `$${Math.round(v / 1e3)}k`),
   time: (ms: number) => {

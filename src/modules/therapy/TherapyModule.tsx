@@ -10,6 +10,7 @@ import { getClassification, getVariant } from '../../data/variants';
 import { regionById } from '../../data/published';
 import {
   INSUFFICIENT_EVIDENCE,
+  MIN_DESIGN_CONFIDENCE,
   PROTEIN_LEVEL_TARGET,
   THERAPY_MODEL_VERSION,
   TRANSCRIPT_NOTE,
@@ -22,6 +23,7 @@ import {
   transcriptRegion,
 } from '../../sim/therapy';
 import {
+  DOSE_SERIES,
   MAX_CANDIDATES_PER_PLATE,
   MEASUREMENT_UNIT,
   SCREENING_NOTE,
@@ -30,14 +32,29 @@ import {
   screeningMetadata,
 } from '../../sim/screening';
 import { Workspace } from '../../ui/Workspace';
+import { BigStat, Headline, useSimple } from '../../ui/simple';
 import { useTour } from '../../tour/tourStore';
 import { Button, EmptyState, EvidenceBadge, Label, MechanismTag, SectionHeader, Segmented, cx, fmt } from '../../ui/primitives';
-import { C } from '../../ui/tokens';
+import { C, MECH_COLOR } from '../../ui/tokens';
 import { CandidateTable } from './CandidateTable';
 import { CompareView } from './CompareView';
 import { DesignCanvas } from './DesignCanvas';
 import { DoseResponsePanel, PlateView } from './PlateView';
-import { Note, OUTCOME_COLOR, OutcomeBadge, PLATFORM_COLOR, PLATFORM_LABEL, RelevanceTag, Row } from './shared';
+import {
+  Note,
+  OUTCOME_COLOR,
+  OutcomeBadge,
+  PLAIN_OUTCOME,
+  PLAIN_STRATEGY,
+  PLATFORM_COLOR,
+  PLATFORM_LABEL,
+  RELEVANCE_COLOR,
+  RelevanceTag,
+  Row,
+  ScoreBar,
+  plainRegion,
+  predictedFit,
+} from './shared';
 
 type Stage = 'design' | 'compare' | 'screen';
 
@@ -70,6 +87,7 @@ export function TherapyModule() {
   const selectWell = useStore((s) => s.selectWell);
   const saveScreeningEvidence = useStore((s) => s.saveScreeningEvidence);
 
+  const simple = useSimple();
   const [stage, setStage] = useState<Stage>('design');
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
 
@@ -115,6 +133,19 @@ export function TherapyModule() {
   const savedArtifacts = library.filter((a) => t.savedArtifactIds.includes(a.id));
 
   // ── gate: mechanism must be characterized ──
+  if (analysisStatus !== 'complete' && simple) {
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <div className="max-w-md border border-line2 bg-surface rounded p-6">
+          <div className="text-[18px] leading-[24px] text-ink mb-2">First, find out what the genetic change does</div>
+          <div className="text-[14px] leading-[20px] text-mute mb-5">
+            A drug has to push the channel in the right direction. Run the lab test to learn whether it is too weak or too active.
+          </div>
+          <Button variant="primary" size="lg" onClick={() => setModule('lab')}>Go to the lab</Button>
+        </div>
+      </div>
+    );
+  }
   if (analysisStatus !== 'complete') {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -123,7 +154,7 @@ export function TherapyModule() {
             <Label>Therapeutic design · gated</Label>
             <EvidenceBadge category="illustrative" />
           </div>
-          <div className="text-md text-ink mb-1.5">Mechanism not yet characterized — run analysis in Molecular Lab</div>
+          <div className="text-md text-ink mb-1.5">Mechanism not yet characterized, run analysis in Molecular Lab</div>
           <div className="text-xs text-mute mb-4">
             {patient.id} · {variant.hgvsP} · {regionById(variant.regionId)?.label ?? variant.regionId}. A therapeutic direction
             cannot be chosen before the variant's functional consequence has been established: the same gene yields opposite
@@ -136,6 +167,30 @@ export function TherapyModule() {
   }
 
   const canAdvance = !!t.strategyId && !!t.targetRegionId && nominatedCandidates.length > 0;
+  const blocked = recommendationHeadline(classification) === INSUFFICIENT_EVIDENCE;
+  const headline = simpleHeadline({
+    blocked,
+    mechanism: classification.mechanism,
+    confidence: classification.confidence,
+    stage,
+    run,
+    hasStrategy: !!t.strategyId,
+    hasRegion: !!t.targetRegionId,
+    proteinLevel,
+    nominated: nominatedCandidates.length,
+  });
+  const advanceButton = (lg: boolean) => (
+    <Button
+      size="sm"
+      variant="primary"
+      className="shrink-0 whitespace-nowrap"
+      data-tour="therapy.advance"
+      disabled={!canAdvance}
+      onClick={() => advanceToScreening(pid)}
+    >
+      {lg ? 'Test on simulated cells →' : 'Advance to virtual screening'}
+    </Button>
+  );
 
   return (
     <Workspace
@@ -143,6 +198,18 @@ export function TherapyModule() {
       sidebarWidth={300}
       inspectorWidth={360}
       sidebar={
+        simple ? (
+          <SimpleSidebar
+            mechanism={classification.mechanism}
+            confidence={classification.confidence}
+            recommendations={recommendations}
+            selectedStrategyId={t.strategyId}
+            onSelectStrategy={(sid) => selectStrategy(pid, sid)}
+            regions={regions.map((r) => ({ id: r.id, label: plainRegion(r) }))}
+            targetRegionId={t.targetRegionId}
+            onSelectRegion={(id) => selectTargetRegion(pid, id)}
+          />
+        ) : (
         <Sidebar
           pid={pid}
           patientLabel={`${patient.presentation}`}
@@ -158,9 +225,28 @@ export function TherapyModule() {
           targetRegionId={t.targetRegionId}
           onSelectRegion={(id) => selectTargetRegion(pid, id)}
         />
+        )
       }
       inspector={
-        stage === 'screen' && run ? (
+        simple ? (
+          stage === 'screen' && run ? (
+            <SimpleScreenInspector
+              run={run}
+              selectedWellId={t.selectedWellId}
+              onSave={() => saveScreeningEvidence(pid)}
+              savedCount={savedArtifacts.length}
+              onContinue={() => setModule('reuse')}
+            />
+          ) : (
+            <SimpleDesignInspector
+              strategyId={t.strategyId}
+              candidate={selectedCandidate}
+              nominatedCount={nominatedCandidates.length}
+              canAdvance={canAdvance}
+              blockedPlan={blocked ? recommendations.find((r) => r.relevance === 'primary')?.strategy.id ?? null : null}
+            />
+          )
+        ) : stage === 'screen' && run ? (
           <ScreenInspector
             run={run}
             candidates={candidates}
@@ -183,6 +269,12 @@ export function TherapyModule() {
       }
     >
       <div className="absolute inset-0 flex flex-col min-h-0">
+        <Headline
+          step="4 / 6"
+          title={headline.title}
+          sub={headline.sub}
+          className="shrink-0 border-b border-line2 bg-bg"
+        />
         <div className="flex items-center justify-between gap-2 h-9 px-3 border-b border-line2 bg-bg shrink-0 whitespace-nowrap overflow-hidden">
           <div className="flex items-center gap-2.5 min-w-0 shrink-0">
             <Segmented<Stage>
@@ -199,25 +291,14 @@ export function TherapyModule() {
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {!run && (
-              <Button
-                size="sm"
-                variant="primary"
-                className="shrink-0 whitespace-nowrap"
-                data-tour="therapy.advance"
-                disabled={!canAdvance}
-                onClick={() => advanceToScreening(pid)}
-              >
-                Advance to virtual screening
-              </Button>
-            )}
+            {!run && advanceButton(simple)}
           </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">
           {stage === 'design' && (
             <div className="h-full min-h-0 flex flex-col">
-              <div className="h-[56%] min-h-0 border-b border-line2" data-tour="therapy.canvas">
+              <div className={cx('min-h-0 border-b border-line2', simple ? 'h-[276px] shrink-0' : 'h-[56%]')} data-tour="therapy.canvas">
                 {t.strategyId ? (
                   <DesignCanvas
                     variant={variant}
@@ -231,24 +312,34 @@ export function TherapyModule() {
                     onSelectRegion={(id) => selectTargetRegion(pid, id)}
                     onSelectCandidate={setSelectedCandidateId}
                   />
+                ) : simple ? (
+                  <EmptyState
+                    title={blocked ? 'No drug to design yet' : 'Pick a strategy on the left'}
+                    detail={blocked ? 'The platform will not guess a direction. Run more lab tests first.' : 'The recommended one is highlighted.'}
+                  />
                 ) : (
                   <EmptyState
                     title="No strategy selected"
                     detail={
                       <>
                         Choose a research strategy in the left panel. Relevance is derived from the modelled mechanism
-                        ({classification.mechanism}) and its confidence — not from a preference.
+                        ({classification.mechanism}) and its confidence, not from a preference.
                       </>
                     }
                   />
                 )}
               </div>
               <div className="flex-1 min-h-0" data-tour="therapy.candidates">
-                {proteinLevel ? (
+                {simple && !t.strategyId ? (
+                  <div className="p-4 text-[13px] text-dim">
+                    {blocked ? 'No candidate designs: the drug direction is not known yet.' : 'Candidate drug designs appear here once you pick a strategy and a spot.'}
+                  </div>
+                ) : proteinLevel ? (
                   <div className="flex flex-col h-full min-h-0">
-                    <div className="px-3 py-2 border-b border-line2 text-[11px] text-mute">
-                      This strategy acts on the channel protein: there is no RNA target region, so the transcript canvas is
-                      informational only. Candidates below are fictional small-molecule records.
+                    <div className={cx('px-3 py-2 border-b border-line2 text-mute', simple ? 'text-[13px]' : 'text-[11px]')}>
+                      {simple
+                        ? 'This drug acts on the channel protein itself, so there is no spot on the gene message to pick.'
+                        : 'This strategy acts on the channel protein: there is no RNA target region, so the transcript canvas is informational only. Candidates below are fictional small-molecule records.'}
                     </div>
                     <div className="flex-1 min-h-0">
                       <CandidateTable
@@ -291,9 +382,11 @@ export function TherapyModule() {
             run ? (
               <div className="h-full min-h-0 overflow-y-auto scroll-thin">
                 <PlateView run={run} selectedWellId={t.selectedWellId} onSelectWell={(id) => selectWell(pid, id)} />
-                <div className="border-t border-line2">
-                  <DoseResponsePanel run={run} selectedCandidateId={selectedCandidateId} onSelect={setSelectedCandidateId} />
-                </div>
+                {!simple && (
+                  <div className="border-t border-line2">
+                    <DoseResponsePanel run={run} selectedCandidateId={selectedCandidateId} onSelect={setSelectedCandidateId} />
+                  </div>
+                )}
               </div>
             ) : (
               <EmptyState
@@ -476,7 +569,7 @@ function DesignInspector({
             <Note className="mt-1.5">Schematic coordinates. Region boundaries are illustrative, not annotated positions.</Note>
           </>
         ) : targetRegionId === PROTEIN_LEVEL_TARGET ? (
-          <Note>Protein-level target — no transcript region. Candidate records describe channel-directed small molecules.</Note>
+          <Note>Protein-level target, no transcript region. Candidate records describe channel-directed small molecules.</Note>
         ) : (
           <Note>Select a highlighted region in the canvas.</Note>
         )}
@@ -499,7 +592,7 @@ function DesignInspector({
               k="Predicted Δ parameter"
               v={`${fmt.signed(candidate.predictedEffect.mid * 100, 0)}% [${fmt.signed(candidate.predictedEffect.low * 100, 0)}, ${fmt.signed(candidate.predictedEffect.high * 100, 0)}]`}
             />
-            <Row k="Window" v={candidate.bindEnd > 0 ? `${candidate.bindStart.toLocaleString()}–${candidate.bindEnd.toLocaleString()} nt` : '— protein-level'} />
+            <Row k="Window" v={candidate.bindEnd > 0 ? `${candidate.bindStart.toLocaleString()}–${candidate.bindEnd.toLocaleString()} nt` : 'protein-level'} />
             <Note className="mt-1">{candidate.predictedEffect.basis}</Note>
             <Label className="mt-2 mb-1">Development requirements</Label>
             <ul className="space-y-[2px]">
@@ -563,8 +656,8 @@ function ScreenInspector({
             </div>
             {well.candidateId && <Row k="Candidate" v={well.candidateId} />}
             <Row k="Condition" v={well.kind === 'candidate' ? `${well.doseNm} nM` : well.kind === 'reference' ? 'reference channel (WT)' : well.kind === 'vehicle' ? 'vehicle, no compound' : 'variant, untreated'} />
-            <Row k="Replicate" v={well.replicate ? `${well.replicate} of ${well.kind === 'candidate' ? 3 : 4}` : '—'} />
-            <Row k="Response" v={`${well.response?.toFixed(1) ?? '—'} ${unit}`} color={C.cyan} />
+            <Row k="Replicate" v={well.replicate ? `${well.replicate} of ${well.kind === 'candidate' ? 3 : 4}` : 'n/a'} />
+            <Row k="Response" v={`${well.response?.toFixed(1) ?? 'n/a'} ${unit}`} color={C.cyan} />
             {any && <Row k="Reference mean" v={`${any.referenceMean.toFixed(1)} ${unit}`} />}
             {any && <Row k="Untreated variant mean" v={`${any.untreatedMean.toFixed(1)} ${unit}`} color={C.warn} />}
             {any && <Row k="Vehicle mean" v={`${any.vehicleMean.toFixed(1)} ${unit}`} />}
@@ -627,7 +720,7 @@ function ScreenInspector({
               Save findings to evidence library
             </Button>
             <Note className="mt-1.5">
-              Saving records the design strategy, the simulated screen and — for an oligonucleotide modality — the platform
+              Saving records the design strategy, the simulated screen and, for an oligonucleotide modality, the platform
               chemistry, analytical, class-safety and documentation artifacts, each with its own reuse conditions.
             </Note>
           </>
@@ -647,10 +740,372 @@ function ScreenInspector({
             </ul>
             <Note className="mb-2">
               These artifacts are now in the evidence library and will be available to the next patient, where each one is
-              re-assessed against its own reuse conditions — some transfer, some require revalidation, some never transfer.
+              re-assessed against its own reuse conditions, some transfer, some require revalidation, some never transfer.
             </Note>
             <Button variant="primary" size="lg" className="w-full" data-tour="therapy.continue" onClick={onContinue}>
               Continue to evidence reuse
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Simple view ─────────────────────────────────────────────────────────
+
+const PLAIN_MECH: Record<MechanismClass, string> = {
+  LoF: 'Too weak (loss of function)',
+  GoF: 'Too active (gain of function)',
+  mixed: 'Both too weak and too active',
+  indeterminate: 'Unknown',
+};
+
+const pct0 = (x: number) => `${Math.round(x * 100)}%`;
+
+type RunT = NonNullable<_TS['screeningRun']>;
+
+function tallyOf(run: RunT) {
+  return run.results.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.outcome]: (acc[r.outcome] ?? 0) + 1 }), {});
+}
+
+/** Headline + one supporting line, derived from the mechanism call and the current design/screen state. */
+function simpleHeadline(x: {
+  blocked: boolean;
+  mechanism: MechanismClass;
+  confidence: number;
+  stage: Stage;
+  run: RunT | null;
+  hasStrategy: boolean;
+  hasRegion: boolean;
+  proteinLevel: boolean;
+  nominated: number;
+}): { title: string; sub: string } {
+  if (x.stage === 'screen' && x.run) {
+    const tl = tallyOf(x.run);
+    const n = x.run.results.length;
+    const pass = tl.pass ?? 0;
+    const mixed = tl.mixed ?? 0;
+    const title =
+      pass > 0
+        ? `We tested ${n} designs on simulated cells: ${pass} worked${mixed ? `, ${mixed} partly` : ''}.`
+        : `We tested ${n} designs on simulated cells: none worked well enough${mixed ? ` (${mixed} partly)` : ''}.`;
+    return { title, sub: 'Brighter squares mean the sodium current came back closer to normal. Click any square to see what happened in it.' };
+  }
+  if (x.blocked) {
+    if (x.mechanism === 'mixed')
+      return {
+        title: 'The channel is both too weak and too active, so no drug direction is safe yet.',
+        sub: 'Pushing either way could make one half of the problem worse. The next step is more lab tests.',
+      };
+    if (x.mechanism === 'indeterminate')
+      return {
+        title: 'Not enough evidence to design a drug yet.',
+        sub: 'The lab could not tell whether the channel is too weak or too active, so any drug might push the wrong way.',
+      };
+    return {
+      title: 'Not enough evidence to design a drug yet.',
+      sub: `The lab result held in only ${pct0(x.confidence)} of re-checks, below the ${pct0(MIN_DESIGN_CONFIDENCE)} needed to pick a direction.`,
+    };
+  }
+  const title =
+    x.mechanism === 'LoF'
+      ? 'The channel is too weak, so design a drug that makes cells build more of the healthy one.'
+      : 'The channel is too active, so design a drug that turns down the faulty copy.';
+  let sub: string;
+  if (!x.hasStrategy) sub = 'Step 1: pick the recommended strategy on the left.';
+  else if (!x.hasRegion && !x.proteinLevel) sub = 'Step 2: click a dashed box on the gene message, a spot where the drug could latch on.';
+  else if (x.nominated < 2) sub = `Step 3: pick 2–3 candidate designs below (${x.nominated} picked so far), then test them.`;
+  else sub = `Ready: test the ${x.nominated} picked designs on simulated patient cells.`;
+  return { title, sub };
+}
+
+function plainNotIndicated(mechanism: MechanismClass, effect: string): string {
+  if (mechanism === 'LoF' && effect === 'decrease-function') return 'Wrong direction: would weaken it further.';
+  if (mechanism === 'GoF' && effect === 'increase-function') return 'Wrong direction: would make it even more active.';
+  if (mechanism === 'mixed' && effect === 'increase-function') return 'Would worsen the too-active half.';
+  if (mechanism === 'mixed') return 'Would worsen the too-weak half.';
+  return 'Direction unknown, so not safe yet.';
+}
+
+function SimpleSidebar({
+  mechanism,
+  confidence,
+  recommendations,
+  selectedStrategyId,
+  onSelectStrategy,
+  regions,
+  targetRegionId,
+  onSelectRegion,
+}: {
+  mechanism: MechanismClass;
+  confidence: number;
+  recommendations: ReturnType<typeof recommendStrategies>;
+  selectedStrategyId: StrategyId | null;
+  onSelectStrategy: (id: StrategyId) => void;
+  regions: { id: string; label: string }[];
+  targetRegionId: string | null;
+  onSelectRegion: (id: string) => void;
+}) {
+  const primary = recommendations.filter((r) => r.relevance === 'primary');
+  const others = recommendations.filter((r) => r.relevance !== 'primary');
+  return (
+    <div className="flex flex-col">
+      <div className="px-4 pt-4 pb-3 border-b border-line2">
+        <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-1">Lab result</div>
+        <div className="text-[15px] leading-[20px]" style={{ color: MECH_COLOR[mechanism] }}>{PLAIN_MECH[mechanism]}</div>
+        {mechanism !== 'indeterminate' && (
+          <div className="text-[12px] text-mute mt-0.5">held in {pct0(confidence)} of re-checks</div>
+        )}
+      </div>
+
+      <div data-tour="therapy.strategies" className="px-3 pt-3 pb-2">
+        <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-2 px-1">Treatment strategy</div>
+        {primary.map((r) => {
+          const selected = r.strategy.id === selectedStrategyId;
+          const selectable = r.strategy.actsOn !== 'none';
+          const plain = PLAIN_STRATEGY[r.strategy.id];
+          return (
+            <button
+              key={r.strategy.id}
+              onClick={() => selectable && onSelectStrategy(r.strategy.id)}
+              disabled={!selectable}
+              className={cx(
+                'w-full text-left p-3 mb-3 rounded border transition-colors',
+                selected ? 'border-cyan bg-cyan/[0.08]' : 'border-cyan/50 bg-surface hover:bg-cyan/[0.05]',
+                !selectable && 'cursor-default',
+              )}
+            >
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <span className={cx('text-[14px] leading-[19px]', selected ? 'text-cyan' : 'text-ink')}>{plain?.name ?? r.strategy.name}</span>
+                <RelevanceTag relevance={r.relevance} />
+              </div>
+              <div className="text-[12.5px] leading-[18px] text-mute">{plain?.what}</div>
+              {selectable && !selected && <div className="mt-2 font-mono text-[10px] tracking-[0.1em] text-cyan">CLICK TO SELECT</div>}
+              {selected && <div className="mt-2 font-mono text-[10px] tracking-[0.1em] text-cyan">✓ SELECTED</div>}
+            </button>
+          );
+        })}
+        <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-1 px-1">Other options</div>
+        {others.map((r) => {
+          const selected = r.strategy.id === selectedStrategyId;
+          const selectable = r.strategy.actsOn !== 'none' && r.relevance !== 'not-indicated';
+          const plain = PLAIN_STRATEGY[r.strategy.id];
+          const off = r.relevance === 'not-indicated';
+          return (
+            <button
+              key={r.strategy.id}
+              onClick={() => selectable && onSelectStrategy(r.strategy.id)}
+              disabled={!selectable}
+              className={cx(
+                'w-full text-left px-2 py-1.5 rounded transition-colors',
+                selected ? 'bg-cyan/[0.07]' : selectable ? 'hover:bg-surface2/60' : 'cursor-default',
+                off && 'opacity-45',
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={cx('text-[12.5px] leading-[17px]', selected ? 'text-cyan' : 'text-ink')}>{plain?.name ?? r.strategy.name}</span>
+                <span className="font-mono text-[9px] uppercase tracking-[0.1em] whitespace-nowrap" style={{ color: RELEVANCE_COLOR[r.relevance] }}>
+                  {off ? 'NOT INDICATED' : 'BACKUP'}
+                </span>
+              </div>
+              {off && <div className="text-[11px] text-dim">{plainNotIndicated(mechanism, r.strategy.intendedEffect)}</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      {regions.length > 0 && (
+        <div className="px-3 pt-2 pb-4 border-t border-line2">
+          <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-2 px-1">Where the drug acts</div>
+          {regions.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => onSelectRegion(r.id)}
+              className={cx(
+                'w-full text-left px-2.5 py-1.5 mb-1 border rounded text-[12.5px] transition-colors',
+                r.id === targetRegionId ? 'border-cyan/70 bg-cyan/[0.06] text-cyan' : 'border-line2 text-ink hover:border-line',
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SimpleDesignInspector({
+  strategyId,
+  candidate,
+  nominatedCount,
+  canAdvance,
+  blockedPlan,
+}: {
+  strategyId: StrategyId | null;
+  candidate: Candidate | null;
+  nominatedCount: number;
+  canAdvance: boolean;
+  blockedPlan: StrategyId | null;
+}) {
+  const strategy = strategyId ? getStrategy(strategyId) : blockedPlan ? getStrategy(blockedPlan) : null;
+  const plain = strategy ? PLAIN_STRATEGY[strategy.id] : undefined;
+  const tooUnsure = !!candidate && candidate.uncertainty >= SCREEN_THRESHOLDS.maxUncertainty;
+  return (
+    <div className="flex flex-col p-4 gap-5">
+      <div>
+        <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-1.5">The plan</div>
+        {strategy ? (
+          <>
+            <div className="text-[15px] leading-[20px] text-ink">{plain?.name ?? strategy.name}</div>
+            <div className="text-[13px] leading-[19px] text-mute mt-1">{plain?.what}</div>
+          </>
+        ) : (
+          <div className="text-[13px] text-mute">Pick a strategy on the left.</div>
+        )}
+      </div>
+
+      {blockedPlan && !strategyId ? (
+        <div className="border-t border-line2 pt-4 text-[13px] leading-[19px] text-mute">
+          No drug designs are made until the lab result points one way. Saying “we don’t know yet” is part of the job.
+        </div>
+      ) : (<>
+      <div className="border-t border-line2 pt-4">
+        <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-1.5">Selected design</div>
+        {candidate ? (
+          <div className="space-y-2">
+            <div className="font-mono text-[13px] text-ink">{candidate.id}</div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[13px] text-mute">Predicted fit</span>
+              <span className="flex items-center gap-2">
+                <ScoreBar value={predictedFit(candidate)} width={90} />
+                <span className="font-mono text-[13px] text-ink tabular-nums">{Math.round(predictedFit(candidate) * 100)}</span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[13px] text-mute">Confidence</span>
+              <span className={cx('text-[13px]', tooUnsure ? 'text-warn' : 'text-ink')}>
+                {tooUnsure ? 'Low, too unsure to judge' : candidate.uncertainty < 0.25 ? 'High' : 'Medium'}
+              </span>
+            </div>
+            <div className="text-[13px] leading-[19px] text-mute">
+              Model guess: channel output changes by{' '}
+              <span className="font-mono text-ink">{fmt.signed(candidate.predictedEffect.mid * 100, 0)}%</span>
+              <span className="text-dim"> (range {fmt.signed(candidate.predictedEffect.low * 100, 0)} to {fmt.signed(candidate.predictedEffect.high * 100, 0)}%)</span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-[13px] text-mute">Click a row in the table to see it here.</div>
+        )}
+      </div>
+
+      <div className="border-t border-line2 pt-4">
+        <BigStat value={nominatedCount} label="designs picked to test" color={nominatedCount > 0 ? C.gof : C.dim} note={`up to ${MAX_CANDIDATES_PER_PLATE} fit on one test plate`} />
+        <div className="text-[13px] leading-[19px] text-mute mt-3">
+          {canAdvance ? 'Ready. Click TEST ON SIMULATED CELLS above the canvas.' : 'Pick designs in the table with NOMINATE.'}
+        </div>
+        <div className="text-[11px] text-dim mt-2">Picking is a research choice, not a decision to treat anyone.</div>
+      </div>
+      </>)}
+    </div>
+  );
+}
+
+function SimpleScreenInspector({
+  run,
+  selectedWellId,
+  onSave,
+  savedCount,
+  onContinue,
+}: {
+  run: RunT;
+  selectedWellId: string | null;
+  onSave: () => void;
+  savedCount: number;
+  onContinue: () => void;
+}) {
+  const well = selectedWellId ? run.plate.find((w) => w.id === selectedWellId) : undefined;
+  const result = resultFor(run, well?.candidateId);
+  const any = run.results[0];
+  const tally = tallyOf(run);
+  const span = any ? any.referenceMean - any.untreatedMean : 0;
+  const recovery = any && well?.response !== undefined && span !== 0 ? (well.response - any.untreatedMean) / span : undefined;
+  const doseIdx = well?.doseNm ? DOSE_SERIES.indexOf(well.doseNm as (typeof DOSE_SERIES)[number]) : -1;
+  const wellLabel = !well
+    ? ''
+    : well.kind === 'candidate'
+      ? `${well.candidateId} · dose ${doseIdx + 1} of ${DOSE_SERIES.length}`
+      : well.kind === 'reference'
+        ? 'Normal cells (healthy channel)'
+        : well.kind === 'untreated-variant'
+          ? 'Patient cells, no drug'
+          : well.kind === 'vehicle'
+            ? 'Blank treatment, no drug'
+            : 'Empty';
+  const outcomes = ['pass', 'mixed', 'fail', 'excluded-uncertainty'] as const;
+
+  return (
+    <div className="flex flex-col p-4 gap-5">
+      <div data-tour="therapy.results">
+        <div className="flex items-center justify-between mb-3">
+          <span className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase">Results · {run.results.length} designs</span>
+          <EvidenceBadge category="simulated" />
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          {outcomes.map((k) => (
+            <div key={k} className="border border-line2 rounded px-2 py-2.5 text-center bg-surface">
+              <div className="font-mono text-[28px] leading-[30px] tabular-nums" style={{ color: (tally[k] ?? 0) > 0 ? OUTCOME_COLOR[k] : C.dim }}>
+                {tally[k] ?? 0}
+              </div>
+              <div className="text-[11.5px] leading-[15px] text-mute mt-1">{PLAIN_OUTCOME[k].toLowerCase()}</div>
+            </div>
+          ))}
+        </div>
+        <div className="text-[13px] leading-[19px] text-ink mt-3">Failures are normal, and they're saved as knowledge too.</div>
+      </div>
+
+      <div className="border-t border-line2 pt-4">
+        <div className="font-mono text-[10px] tracking-[0.14em] text-dim uppercase mb-1.5">
+          {well && well.kind !== 'empty' ? `Square ${well.id}` : 'Selected square'}
+        </div>
+        {well && well.kind !== 'empty' ? (
+          <div className="space-y-1.5">
+            <div className="text-[14px] text-ink">{wellLabel}</div>
+            {well.kind === 'candidate' && recovery !== undefined && (
+              <div className="text-[13px] leading-[19px] text-mute">
+                Current came back{' '}
+                <span className="font-mono" style={{ color: OUTCOME_COLOR[result?.outcome ?? 'mixed'] }}>
+                  {Math.round(Math.max(0, recovery) * 100)}%
+                </span>{' '}
+                of the way to normal in this dish.
+              </div>
+            )}
+            {result && well.kind === 'candidate' && (
+              <div className="flex items-center gap-2 text-[13px] text-mute">
+                Overall verdict for this design:
+                <OutcomeBadge outcome={result.outcome} label={PLAIN_OUTCOME[result.outcome].toUpperCase()} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-[13px] text-mute">Click any square on the plate.</div>
+        )}
+      </div>
+
+      <div className="border-t border-line2 pt-4">
+        {savedCount === 0 ? (
+          <>
+            <Button variant="primary" size="lg" className="w-full" data-tour="therapy.save" onClick={onSave}>
+              Save findings to evidence library
+            </Button>
+            <div className="text-[12px] leading-[17px] text-dim mt-2">Saves the design, the test and its result so the next patient can start from them.</div>
+          </>
+        ) : (
+          <>
+            <BigStat value={savedCount} label="records saved to the evidence library" color={C.cyan} />
+            <Button variant="primary" size="lg" className="w-full mt-4" data-tour="therapy.continue" onClick={onContinue}>
+              Continue to evidence reuse →
             </Button>
           </>
         )}

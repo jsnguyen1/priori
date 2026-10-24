@@ -48,14 +48,14 @@ function ArtifactRow({ a }: { a: EvidenceArtifact }) {
               ['source type', p.sourceType],
               ['origin', p.originatingPatientId ?? p.originatingProgram],
               ['gene', p.gene],
-              ['mechanism', p.mechanism ?? '—'],
-              ['variant', p.variantId ? `${p.variantId} ${getVariant(p.variantId)?.hgvsP ?? ''}` : '—'],
-              ['protocol', p.protocolVersion ?? '—'],
-              ['cell system', p.cellSystem ?? '—'],
-              ['modality', p.modality ?? '—'],
+              ['mechanism', p.mechanism ?? 'n/a'],
+              ['variant', p.variantId ? `${p.variantId} ${getVariant(p.variantId)?.hgvsP ?? ''}` : 'n/a'],
+              ['protocol', p.protocolVersion ?? 'n/a'],
+              ['cell system', p.cellSystem ?? 'n/a'],
+              ['modality', p.modality ?? 'n/a'],
               ['validation', p.validationStatus],
               ['created', fmt.time(a.createdAt)],
-              ['depends on', a.dependsOn.join(', ') || '—'],
+              ['depends on', a.dependsOn.join(', ') || 'n/a'],
             ] as [string, string][]
           ).map(([k, v]) => (
             <div key={k} className="contents">
@@ -147,14 +147,14 @@ export function ProvenanceDrawer() {
                   <div>Therapeutic strategies, candidate records, binding/specificity scores and the transcript map are illustrative and non-actionable. No sequences are provided. {REUSE_RULES_VERSION} decides evidence transfer from typed provenance conditions.</div>
                 </Block>
                 <Block category="assumption" title="Financial & scheduling assumptions">
-                  <div>{TASKS.length} development tasks with effort, duration and cost ranges; timelines are computed from task dependencies (critical path). Scenarios: {Object.values(SCENARIOS).map((s) => s.label).join(' / ') || '—'}.</div>
+                  <div>{TASKS.length} development tasks with effort, duration and cost ranges; timelines are computed from task dependencies (critical path). Scenarios: {Object.values(SCENARIOS).map((s) => s.label).join(' / ') || 'n/a'}.</div>
                   <div>These are scenario assumptions for discussion, not observed Priori results, quotes or forecasts.</div>
                 </Block>
               </>
             )}
             {tab === 'library' && (
               <div>
-                <div className="px-4 py-2 text-xs text-mute border-b border-line2">Every artifact carries structured provenance. The reuse engine evaluates these fields and typed conditions — never titles or free text.</div>
+                <div className="px-4 py-2 text-xs text-mute border-b border-line2">Every artifact carries structured provenance. The reuse engine evaluates these fields and typed conditions, never titles or free text.</div>
                 {library.map((a) => (
                   <ArtifactRow key={a.id} a={a} />
                 ))}

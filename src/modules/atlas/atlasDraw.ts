@@ -25,16 +25,17 @@ export interface Layout {
   map: { y0: number; y1: number };
 }
 
-export function computeLayout(W: number, H: number): Layout {
+export function computeLayout(W: number, H: number, simple = false): Layout {
   const L = MARGIN.left;
   const R = Math.max(L + 50, W - MARGIN.right);
   const ty0 = 28;
   const topo = { y0: ty0, y1: ty0 + 72, labelY: ty0 + 9, bracketY: ty0 + 14, extraY: ty0 + 25, memTop: ty0 + 32, memBot: ty0 + 50, cytoY: ty0 + 58, ifmY: ty0 + 69 };
   const mapH = 30;
   const map = { y0: H - 8 - mapH, y1: H - 8 };
-  const rowH = 22;
-  const meas = { y0: map.y0 - 16 - rowH * 4, y1: map.y0 - 16, rowH };
-  const main = { y0: topo.y1 + 14, y1: meas.y0 - 16, zero: 0 };
+  // Simple view drops the per-variant measurement sub-plot; the main plot takes its space.
+  const rowH = simple ? 0 : 22;
+  const meas = simple ? { y0: map.y0 - 22, y1: map.y0 - 22, rowH } : { y0: map.y0 - 16 - rowH * 4, y1: map.y0 - 16, rowH };
+  const main = { y0: topo.y1 + 14, y1: meas.y0 - (simple ? 4 : 16), zero: 0 };
   main.zero = (main.y0 + main.y1) / 2;
   return { W, H, L, R, axisY: 22, topo, main, meas, map };
 }
@@ -48,6 +49,8 @@ export interface DrawState {
   selected: number;
   hover: HoverTarget | null;
   layout: Layout;
+  /** Simple view: plain-English labels, no measurement sub-plot. */
+  simple?: boolean;
 }
 
 export type HoverTarget =
@@ -134,11 +137,17 @@ export function draw(ctx: CanvasRenderingContext2D, s: DrawState) {
   const iHi = lowerBound(index.pos, Math.ceil(d1) + 2);
 
   // ── left-margin track titles
-  text(ctx, 'RESIDUE', 12, 12, C.dim, 8.5);
-  text(ctx, 'TOPOLOGY', 12, Lo.topo.labelY, C.dim, 8.5);
-  text(ctx, 'OUT', L - 8, Lo.topo.extraY, C.dim, 8, 'right');
-  text(ctx, 'MEM', L - 8, (Lo.topo.memTop + Lo.topo.memBot) / 2, C.dim, 8, 'right');
-  text(ctx, 'IN', L - 8, Lo.topo.cytoY, C.dim, 8, 'right');
+  if (s.simple) {
+    text(ctx, 'outside', L - 8, Lo.topo.extraY, C.mute, 9, 'right');
+    text(ctx, 'membrane', L - 8, (Lo.topo.memTop + Lo.topo.memBot) / 2, C.mute, 9, 'right');
+    text(ctx, 'inside', L - 8, Lo.topo.cytoY, C.mute, 9, 'right');
+  } else {
+    text(ctx, 'RESIDUE', 12, 12, C.dim, 8.5);
+    text(ctx, 'TOPOLOGY', 12, Lo.topo.labelY, C.dim, 8.5);
+    text(ctx, 'OUT', L - 8, Lo.topo.extraY, C.dim, 8, 'right');
+    text(ctx, 'MEM', L - 8, (Lo.topo.memTop + Lo.topo.memBot) / 2, C.dim, 8, 'right');
+    text(ctx, 'IN', L - 8, Lo.topo.cytoY, C.dim, 8, 'right');
+  }
 
   ctx.save();
   ctx.beginPath();
@@ -148,12 +157,13 @@ export function draw(ctx: CanvasRenderingContext2D, s: DrawState) {
   drawAxis(ctx, s, d0, d1, pxPerRes, A.seq);
   drawTopology(ctx, s, pxPerRes);
   drawMain(ctx, s, A, iLo, iHi, pxPerRes, span);
-  drawMeasurements(ctx, s, A.meas, iLo, iHi, pxPerRes);
+  if (!s.simple) drawMeasurements(ctx, s, A.meas, iLo, iHi, pxPerRes);
   drawGuides(ctx, s, pxPerRes);
   ctx.restore();
 
   drawMainAxisLabels(ctx, s, A);
-  drawMeasLabels(ctx, s, A.meas);
+  if (s.simple) drawSimpleFooter(ctx, s);
+  else drawMeasLabels(ctx, s, A.meas);
   drawMinimap(ctx, s, d0, d1);
 }
 
@@ -358,7 +368,7 @@ function drawMain(ctx: CanvasRenderingContext2D, s: DrawState, A: ReturnType<typ
     ctx.lineTo(Lo.R, Math.round(yN) + 0.5);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.globalAlpha = A.marks;
+    ctx.globalAlpha = s.simple ? 0 : A.marks;
     text(ctx, `GoF CALL · net ≥ +${THRESHOLDS.directional}`, Lo.R - 4, yP - 7, hexA(C.gof, 0.8), 8.5, 'right');
     text(ctx, `LoF CALL · net ≤ −${THRESHOLDS.directional}`, Lo.R - 4, yN + 8, hexA(C.lof, 0.85), 8.5, 'right');
     ctx.globalAlpha = 1;
@@ -545,7 +555,10 @@ function drawGuides(ctx: CanvasRenderingContext2D, s: DrawState, pxPerRes: numbe
       ctx.stroke();
       ctx.setLineDash([]);
       text(ctx, '?', x, y + 0.5, C.ink, 8, 'center');
-      if (pxPerRes > 0.6) text(ctx, 'UNCHARACTERIZED', x + 9, y, C.mute, 8.5);
+      if (pxPerRes > 0.6) {
+        if (s.simple) text(ctx, 'NOT MEASURED YET', x + 17, y, C.ink, 9);
+        else text(ctx, 'UNCHARACTERIZED', x + 9, y, C.mute, 8.5);
+      }
     } else {
       ctx.fillStyle = MECH_HEX[index.mech[i]];
       ctx.fill();
@@ -621,6 +634,17 @@ function drawMainAxisLabels(ctx: CanvasRenderingContext2D, s: DrawState, A: Retu
   const Lo = s.layout;
   const m = Lo.main;
   const dA = 1 - A.marks;
+  if (s.simple) {
+    // One plain label per band; no score ticks or density scale.
+    const top = A.marks > 0.5 ? netY(Lo, 2.2) : m.zero - (m.y1 - m.y0) * 0.25;
+    const bot = A.marks > 0.5 ? netY(Lo, -2.2) : m.zero + (m.y1 - m.y0) * 0.25;
+    text(ctx, '↑ TOO', 12, top - 7, hexA(C.gof, 0.95), 10);
+    text(ctx, '  ACTIVE', 12, top + 7, hexA(C.gof, 0.95), 10);
+    text(ctx, 'UNCLEAR', 12, m.zero, C.mute, 10);
+    text(ctx, '↓ TOO', 12, bot - 7, hexA(C.lof, 0.95), 10);
+    text(ctx, '  WEAK', 12, bot + 7, hexA(C.lof, 0.95), 10);
+    return;
+  }
   if (A.marks > 0.02) {
     ctx.globalAlpha = A.marks;
     text(ctx, 'NET SCORE', 12, m.y0 + 8, C.dim, 8.5);
@@ -674,6 +698,13 @@ function drawMeasLabels(ctx: CanvasRenderingContext2D, s: DrawState, a: number) 
   text(ctx, 'OVERVIEW', 12, (Lo.map.y0 + Lo.map.y1) / 2, C.dim, 8.5);
   text(ctx, 'SCROLL ZOOM · DRAG PAN · CLICK SELECT', Lo.R, Lo.map.y0 - 8, C.dim, 8, 'right');
   text(ctx, 'PEAK, PERSIST: log₂ ratio to matched reference · ΔV½: mV vs reference · whiskers ± 1 SE', Lo.L, Lo.map.y0 - 8, C.dim, 8, 'left');
+}
+
+function drawSimpleFooter(ctx: CanvasRenderingContext2D, s: DrawState) {
+  const Lo = s.layout;
+  text(ctx, 'WHOLE', 12, (Lo.map.y0 + Lo.map.y1) / 2 - 6, C.mute, 9);
+  text(ctx, 'PROTEIN', 12, (Lo.map.y0 + Lo.map.y1) / 2 + 6, C.mute, 9);
+  text(ctx, 'scroll to zoom · drag to move · click a dot', Lo.R, Lo.map.y0 - 9, C.mute, 9, 'right');
 }
 
 function drawMinimap(ctx: CanvasRenderingContext2D, s: DrawState, d0: number, d1: number) {
